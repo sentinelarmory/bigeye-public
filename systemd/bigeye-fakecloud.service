@@ -1,0 +1,13 @@
+# Camera machine: stand-in for the 360 camera's cloud (DNS, HTTP/S, socket.io, P2P)
+[Unit]
+Description=Sentinel-BigEye stand-in cloud for the 360 camera
+
+[Service]
+Environment=BIGEYE_360_UUID=PUT-THE-ID-FROM-THE-CAMERA-LABEL-HERE
+Environment=BIGEYE_HOST_IP=10.42.0.1
+ExecStart=/usr/bin/python3 %h/bigeye/camera-machine/bigeye-fakecloud.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target

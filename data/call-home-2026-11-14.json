@@ -1,0 +1,197 @@
+{
+  "captured_at": "2026-11-14T10:52:03Z",
+  "period": "today (local midnight to captured_at)",
+  "attempts_today": 17077,
+  "attempts_last_hour": 2258,
+  "picture_uploads": 160,
+  "picture_upload_bytes": 3285909,
+  "person_reports": 76,
+  "per_camera": {
+    "cam360": 15774,
+    "door": 1303
+  },
+  "per_kind": [
+    {
+      "kind": "P2P server (China/abroad)",
+      "attempts": 13500,
+      "by_camera": {
+        "cam360": 13500
+      },
+      "what_it_does": "Says hello to the peer-to-peer servers that let the app (and the vendor) reach the camera from anywhere."
+    },
+    {
+      "kind": "Keep-alive",
+      "attempts": 1686,
+      "by_camera": {
+        "cam360": 1686
+      },
+      "what_it_does": "Keeps a permanent line open to the cloud so it can be reached and told what to do."
+    },
+    {
+      "kind": "Door/window cloud",
+      "attempts": 1303,
+      "by_camera": {
+        "door": 1303
+      },
+      "what_it_does": "The door or window camera calls its own cloud (iWFCam) to say where it is."
+    },
+    {
+      "kind": "Picture upload",
+      "attempts": 160,
+      "by_camera": {
+        "cam360": 160
+      },
+      "what_it_does": "Sends a picture from your room to its cloud storage (Alibaba OSS). Caught and kept on the camera machine."
+    },
+    {
+      "kind": "Motion report",
+      "attempts": 158,
+      "by_camera": {
+        "cam360": 158
+      },
+      "what_it_does": "Tells the cloud it saw movement or a person, with time and picture name."
+    },
+    {
+      "kind": "Looks up a server",
+      "attempts": 122,
+      "by_camera": {
+        "cam360": 122
+      },
+      "what_it_does": "Asks for the address of one of its cloud servers."
+    },
+    {
+      "kind": "Sign-in / status",
+      "attempts": 47,
+      "by_camera": {
+        "cam360": 47
+      },
+      "what_it_does": "Signs in to its cloud, reports that it is bound to your account and its on/off switch."
+    },
+    {
+      "kind": "Firmware / remote log check",
+      "attempts": 41,
+      "by_camera": {
+        "cam360": 41
+      },
+      "what_it_does": "Asks for remote logging settings and firmware updates (a way to change the camera from afar)."
+    },
+    {
+      "kind": "Viewing report",
+      "attempts": 39,
+      "by_camera": {
+        "cam360": 39
+      },
+      "what_it_does": "Reports when and how long someone watched the live picture."
+    },
+    {
+      "kind": "Time and region",
+      "attempts": 9,
+      "by_camera": {
+        "cam360": 9
+      },
+      "what_it_does": "Asks the cloud for the time, time zone and which server region to use."
+    },
+    {
+      "kind": "Other",
+      "attempts": 6,
+      "by_camera": {
+        "cam360": 6
+      },
+      "what_it_does": "Other contact."
+    },
+    {
+      "kind": "Asks for upload keys",
+      "attempts": 4,
+      "by_camera": {
+        "cam360": 4
+      },
+      "what_it_does": "Asks the cloud for storage keys so it can upload pictures and video."
+    },
+    {
+      "kind": "Sends its access password",
+      "attempts": 2,
+      "by_camera": {
+        "cam360": 2
+      },
+      "what_it_does": "Sends the new password for live video it makes at every start. Whoever has it can watch."
+    }
+  ],
+  "per_10_minutes": {
+    "start": "2026-11-13T23:00:00Z",
+    "slot_seconds": 600,
+    "counts": [
+      142,
+      24,
+      22,
+      515,
+      1041,
+      28,
+      144,
+      26,
+      522,
+      24,
+      28,
+      165,
+      526,
+      24,
+      26,
+      22,
+      652,
+      26,
+      22,
+      22,
+      1030,
+      642,
+      22,
+      24,
+      22,
+      522,
+      153,
+      32,
+      25,
+      521,
+      26,
+      142,
+      22,
+      530,
+      22,
+      22,
+      142,
+      1525,
+      21,
+      522,
+      35,
+      146,
+      26,
+      526,
+      20,
+      22,
+      137,
+      559,
+      542,
+      542,
+      26,
+      640,
+      98,
+      50,
+      530,
+      34,
+      20,
+      142,
+      20,
+      20,
+      20,
+      529,
+      61,
+      57,
+      49,
+      20,
+      1020,
+      634,
+      20,
+      44,
+      520,
+      0
+    ]
+  }
+}

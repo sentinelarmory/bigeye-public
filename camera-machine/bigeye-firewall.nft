@@ -1,0 +1,44 @@
+# Replace the placeholder MACs: 00:00:00:00:03:60 = the 360 camera, 00:00:00:00:00:d0 / :a1 = door / window,
+# 00:00:00:00:00:ad = the PC that may SSH in. wlp5s0 = the camera Wi-Fi interface.
+# BigEye camera network (Wi-Fi interface wlp5s0 on the camera machine).
+# Nothing that arrives on the camera Wi-Fi may leave it, and the cameras may
+# only ask this machine for an address. The owner's PC may still SSH in.
+define cam360 = 00:00:00:00:03:60
+# Door and window cameras (iWFCam battery cameras).
+define iwfcams = { 00:00:00:00:00:d0, 00:00:00:00:00:a1 }
+table inet bigeye
+delete table inet bigeye
+table inet bigeye {
+	chain input {
+		type filter hook input priority -5; policy accept;
+		iifname != "wlp5s0" accept
+		ct state established,related accept
+		udp dport 67 accept
+		meta l4proto { icmp, ipv6-icmp } accept
+		ether saddr 00:00:00:00:00:ad tcp dport 22 accept
+		# 360 camera: allowed to talk to the fake cloud on this machine only.
+		# Any UDP from the 360 camera: its local P2P replies come from rotating ports.
+		iifname "wlp5s0" ether saddr $cam360 meta l4proto udp accept
+		iifname "wlp5s0" ether saddr $cam360 tcp dport { 18080, 18443 } accept
+		# Door and window cameras: their cloud lookups go to the warm cloud (bigeye-iwfcloud.py).
+		iifname "wlp5s0" ether saddr $iwfcams udp dport { 10101-10103 } accept
+		counter drop
+	}
+	# 360 camera: its DNS, cloud web, P2P-server and relay traffic is sent to the
+	# fake cloud (bigeye-fakecloud.py) instead of out. Nothing leaves the house.
+	chain prerouting {
+		type nat hook prerouting priority dstnat; policy accept;
+		iifname "wlp5s0" ether saddr $cam360 udp dport 53 dnat ip to 10.42.0.1:15353
+		# Any destination: the camera may have cached 10.42.0.1 or a real cloud address.
+		iifname "wlp5s0" ether saddr $cam360 tcp dport 80 dnat ip to 10.42.0.1:18080
+		iifname "wlp5s0" ether saddr $cam360 udp dport { 32100, 10000, 10126 } dnat ip to 10.42.0.1
+		iifname "wlp5s0" ether saddr $cam360 tcp dport 443 dnat ip to 10.42.0.1:18443
+		# Door and window cameras: cloud lookup and server ports, any destination.
+		iifname "wlp5s0" ether saddr $iwfcams udp dport { 10101-10103 } dnat ip to 10.42.0.1
+	}
+	chain forward {
+		type filter hook forward priority -5; policy accept;
+		iifname "wlp5s0" counter drop
+		oifname "wlp5s0" counter drop
+	}
+}

@@ -1,0 +1,45 @@
+# Replace the placeholder MACs: 00:00:00:00:03:60 = the 360 camera, 00:00:00:00:00:d0 / :a1 = door / window,
+# 00:00:00:00:00:ad = the PC that may SSH in. wlp5s0 = the camera Wi-Fi interface.
+# BigEye pairing mode: TEMPORARY. Devices on the camera Wi-Fi may reach the
+# internet (never the home LAN), and every new connection is logged.
+# A reboot or "bigeye-pairing.sh off" puts the dead network back.
+# The cameras keep their fake-cloud rules from bigeye-firewall.nft here too: without
+# them (as on 2026-11-14) the 360 camera's replies are dropped and its picture is lost.
+define cam360 = 00:00:00:00:03:60
+define iwfcams = { 00:00:00:00:00:d0, 00:00:00:00:00:a1 }
+table inet bigeye
+delete table inet bigeye
+table inet bigeye {
+	chain input {
+		type filter hook input priority -5; policy accept;
+		iifname != "wlp5s0" accept
+		ct state established,related accept
+		udp dport 67 accept
+		meta l4proto { icmp, ipv6-icmp } accept
+		udp dport 53 log prefix "BigEye-DNS " accept
+		tcp dport 53 log prefix "BigEye-DNS " accept
+		ether saddr 00:00:00:00:00:ad tcp dport 22 accept
+		iifname "wlp5s0" ether saddr $cam360 meta l4proto udp accept
+		iifname "wlp5s0" ether saddr $cam360 tcp dport { 18080, 18443 } accept
+		iifname "wlp5s0" ether saddr $iwfcams udp dport { 10101-10103 } accept
+		counter drop
+	}
+	chain prerouting {
+		type nat hook prerouting priority dstnat; policy accept;
+		iifname "wlp5s0" ether saddr $cam360 udp dport 53 dnat ip to 10.42.0.1:15353
+		iifname "wlp5s0" ether saddr $cam360 tcp dport 80 dnat ip to 10.42.0.1:18080
+		iifname "wlp5s0" ether saddr $cam360 udp dport { 32100, 10000, 10126 } dnat ip to 10.42.0.1
+		iifname "wlp5s0" ether saddr $cam360 tcp dport 443 dnat ip to 10.42.0.1:18443
+		iifname "wlp5s0" ether saddr $iwfcams udp dport { 10101-10103 } dnat ip to 10.42.0.1
+	}
+	chain forward {
+		type filter hook forward priority -5; policy accept;
+		ct state established,related accept
+		meta nfproto ipv6 iifname "wlp5s0" counter drop
+		# The owner's PC is only a viewer here; its own traffic must use its cable.
+		iifname "wlp5s0" ether saddr 00:00:00:00:00:ad counter drop
+		iifname "wlp5s0" ip daddr { 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 169.254.0.0/16 } counter drop
+		iifname "wlp5s0" ct state new log prefix "BigEye-OUT " accept
+		oifname "wlp5s0" counter drop
+	}
+}

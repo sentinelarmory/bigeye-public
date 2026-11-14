@@ -1,0 +1,13 @@
+# Camera machine: local bridge for the 360 camera (needs the stand-in cloud for its password)
+[Unit]
+Description=Sentinel-BigEye bridge for the 360 camera
+
+[Service]
+Environment=CAM360_MAC=00:00:00:00:03:60
+Environment=CAMERA_IFACE=wlan0
+ExecStart=/usr/bin/python3 %h/bigeye/bridges/cam360/cam360-bridge.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target

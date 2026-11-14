@@ -1,0 +1,11 @@
+# Main machine: people/animal/face detection on the GPU (falls back to the CPU)
+[Unit]
+Description=Sentinel-BigEye AI (http://127.0.0.1:8771)
+
+[Service]
+ExecStart=%h/.local/share/sentinel-bigeye/ai-venv/bin/python %h/bigeye/ai/bigeye-ai.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target

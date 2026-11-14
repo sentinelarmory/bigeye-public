@@ -1,0 +1,12 @@
+# Camera machine: stand-in for the iWFCam cloud (door/window cameras)
+[Unit]
+Description=Sentinel-BigEye stand-in cloud for iWFCam cameras
+
+[Service]
+Environment=BIGEYE_HOST_IP=10.42.0.1
+ExecStart=/usr/bin/python3 %h/bigeye/camera-machine/bigeye-iwfcloud.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target

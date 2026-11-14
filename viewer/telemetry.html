@@ -1,0 +1,153 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Call-home Monitor</title>
+<style>
+:root{--bg:#0e1013;--card:#171a1f;--card2:#1e2229;--line:#2a2f38;--txt:#e6e8eb;--dim:#8b93a1;--mut:#5f6773;--acc:#4da3ff;--ok:#3ecf6e;--bad:#ff5d5d;--warn:#ffb340;--grid:#252a33}
+@media (prefers-color-scheme: light){:root:not([data-theme="dark"]){--bg:#f5f6f8;--card:#fff;--card2:#f0f2f5;--line:#dfe3e8;--txt:#1b1f24;--dim:#5a6270;--mut:#8a919c;--acc:#1f6fd1;--ok:#1f9d55;--bad:#d64545;--warn:#b7791f;--grid:#eceff3}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--txt);font:14px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif}
+header{display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--bg);z-index:3;flex-wrap:wrap}
+header h1{font-size:16px;margin:0}header h1 span{color:var(--acc)}header a{color:var(--acc);text-decoration:none}.sp{flex:1}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.seg button{background:transparent;color:var(--dim);border:0;padding:6px 12px;cursor:pointer;font:inherit}
+.seg button+button{border-left:1px solid var(--line)}.seg button.on{background:var(--acc);color:#fff}.seg button:hover{color:var(--txt)}
+.live{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--dim)}.live i{width:8px;height:8px;border-radius:50%;background:var(--mut)}
+.live.on i{background:var(--ok);box-shadow:0 0 8px var(--ok);animation:pulse 1.6s infinite}@keyframes pulse{50%{opacity:.4}}
+main{max-width:1200px;margin:0 auto;padding:16px;display:grid;gap:16px;grid-template-columns:minmax(0,1fr)}
+code{overflow-wrap:anywhere;font-size:12px}.card{min-width:0}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px}
+.tile{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 16px}
+.tile b{display:block;font-size:30px;font-variant-numeric:tabular-nums;letter-spacing:-.5px}.tile span{color:var(--dim);font-size:12px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 16px}
+.card h2{font-size:14px;margin:0 0 10px;font-weight:600}.card h2 small{color:var(--dim);font-weight:400;margin-left:6px}
+#chart{position:relative}#chart svg{display:block;width:100%;height:220px}
+.tip{position:absolute;pointer-events:none;background:var(--card2);border:1px solid var(--line);border-radius:8px;padding:6px 10px;font-size:12px;white-space:nowrap;display:none;box-shadow:0 4px 14px rgba(0,0,0,.3)}
+.cats{display:grid;gap:10px}.cat{display:grid;grid-template-columns:minmax(150px,220px) 1fr 70px;gap:10px;align-items:center}
+.cat .name{font-weight:600;font-size:13px}.cat .why{grid-column:1/-1;color:var(--dim);font-size:12px;margin-top:-6px}
+.bar{height:10px;background:var(--card2);border-radius:5px;overflow:hidden}.bar i{display:block;height:100%;background:var(--acc);border-radius:0 4px 4px 0}
+.cat .n{text-align:right;font-variant-numeric:tabular-nums}
+.two{display:grid;grid-template-columns:minmax(0,3fr) minmax(0,2fr);gap:16px}
+@media (max-width:900px){.two{grid-template-columns:minmax(0,1fr)}.cat{grid-template-columns:minmax(110px,150px) 1fr 56px}}
+#feed{max-height:520px;overflow:auto;display:flex;flex-direction:column;gap:4px;font-size:12px}
+.ev{display:grid;grid-template-columns:62px 64px minmax(0,1fr);gap:8px;padding:5px 6px;border-radius:6px;align-items:baseline}
+.ev:nth-child(odd){background:var(--card2)}.ev.new{animation:flash 1.5s}@keyframes flash{0%{background:rgba(77,163,255,.35)}}
+.ev time{color:var(--dim);font-variant-numeric:tabular-nums}.ev .cam{color:var(--dim)}
+.ev .lbl{font-weight:600}.ev .raw{display:block;color:var(--mut);font-family:ui-monospace,Consolas,monospace;font-size:11px;word-break:break-all}
+.pics{display:flex;gap:8px;overflow-x:auto;padding-bottom:4px}.pics a{flex:0 0 160px;color:var(--dim);font-size:11px;text-decoration:none}
+.pics img{width:160px;height:90px;object-fit:cover;border-radius:6px;display:block;background:#000;border:1px solid var(--line)}
+ol.steps{margin:0;padding-left:20px;display:grid;gap:8px}ol.steps li b{color:var(--txt)}ol.steps li{color:var(--dim)}
+.note{color:var(--dim);font-size:12px}button.link{background:none;border:0;color:var(--acc);cursor:pointer;font:inherit;padding:0}
+table{border-collapse:collapse;font-size:12px;width:100%}td,th{padding:3px 6px;border-bottom:1px solid var(--line);text-align:left}
+</style>
+<header><h1>Sentinel-<span>BigEye</span></h1>
+<nav class="seg"><button onclick="location.href='/'">📹 Cameras</button><button class="on">📡 Call-home</button></nav>
+<span class="live" id="live"><i></i><span>connecting to the camera machine…</span></span><span class="sp"></span>
+<nav class="seg" title="Make a report you can print, save as PDF or send. A copy is saved on this PC (Videos\\Sentinel-BigEye\\reports)."><button onclick="window.open('/telemetry/report?period=today')">📄 Report: today</button><button onclick="window.open('/telemetry/report?period=24h')">📄 Last 24 h</button></nav></header>
+<main>
+<div class="tiles">
+  <div class="tile"><b id="t-today">–</b><span>attempts to call home today</span></div>
+  <div class="tile"><b id="t-hour">–</b><span>in the last hour</span></div>
+  <div class="tile"><b id="t-rate">–</b><span>per hour on average today</span></div>
+  <div class="tile"><b id="t-up">–</b><span id="t-upb">pictures it tried to upload</span></div>
+  <div class="tile"><b id="t-person">–</b><span>"person seen" reports it tried to send</span></div>
+</div>
+<div class="card"><h2>Per camera <small>today · who is calling home</small></h2><div class="tiles" id="cams"></div></div>
+<div class="card"><h2>Attempts per 10 minutes <small>last 12 hours · all cameras · <button class="link" id="tbl">show as table</button></small></h2>
+  <div id="chart"><svg id="svg" role="img" aria-label="Attempts per 10 minutes, last 12 hours"></svg><div class="tip" id="tip"></div></div>
+  <div id="table" hidden></div></div>
+<div class="two">
+  <div class="card"><h2>What they try to do <small>today, most first</small></h2><div class="cats" id="cats"></div></div>
+  <div class="card"><h2>Live <small>every attempt as it happens, newest first</small></h2><div id="feed"></div></div>
+</div>
+<div class="card"><h2>Pictures the 360 camera tried to send out <small>caught and kept on the camera machine, never left the house</small></h2><div class="pics" id="pics"></div></div>
+<div class="card"><h2>How they phone home <small>what the captures showed, step by step</small></h2>
+<ol class="steps">
+  <li><b>Look up the vendor's servers.</b> At every start the 360 camera asks DNS for <code>ep.tange365.com</code>, <code>device-we01.tange365.com</code>, <code>ihome-ota-service.tange365.com</code> and more, and also uses a hard-coded "HTTP DNS" server (203.107.1.33) to get around your own DNS.</li>
+  <li><b>Ask where to go.</b> <code>POST /service</code> returns the region (we01) and the addresses of the sign-in, API and statistics servers (Alibaba cloud).</li>
+  <li><b>Sign in and prove it belongs to an account.</b> <code>/auth/active</code>, <code>/auth/get_bind_status</code>, <code>/auth/bind</code> (first start) with your account id in every report afterwards.</li>
+  <li><b>Hand over the key to the live video.</b> The camera makes a new live-video password at every start and sends it to the cloud with <code>/auth/password</code>. Whoever holds the cloud can watch.</li>
+  <li><b>Keep a line open.</b> A permanent socket.io connection pings every 25 s so the cloud can push orders (time zone, new servers, new storage keys) at any time.</li>
+  <li><b>Register with peer-to-peer servers.</b> UDP 32100 to servers in China (119.23.250.91, 47.107.255.39, 120.79.14.221) and abroad, plus relay ports 10000/10126 that carry live video out of the house.</li>
+  <li><b>Report what it sees and upload pictures.</b> Its own AI tags "body" (person) or "motion", sends <code>/record/report</code>, asks <code>/record/token</code> for real Alibaba OSS storage keys, then uploads the picture over HTTPS.</li>
+  <li><b>Report viewing and ask for remote control.</b> <code>/stats/device/streaming-record</code> when someone watches, and <code>/ota/getlogconfig</code> for remote logging and firmware updates.</li>
+  <li><b>Door and window cameras (iWFCam)</b> do the same on UDP 10101–10103: they look themselves up and say where they are, so the app (and the vendor) can reach them.</li>
+</ol>
+<p class="note">Here every step lands on the camera machine: the camera Wi-Fi has no way out, DNS and the cloud ports are redirected to stand-ins that answer "OK" and keep what they get. Counts are exact even where a log writes only every 100th packet.</p></div>
+</main>
+<script>
+var seq = 0, LABELS = {}, first = true;
+var CAMNAMES = {cam360: 'Cam360', door: 'Door', window: 'Window', 'door/window': 'Door or window'};
+function CAMNAME(k) { return CAMNAMES[k] || k; }
+function el(t, a, kids) { var e = document.createElement(t); Object.keys(a || {}).forEach(function (k) { if (k === 'text') e.textContent = a[k]; else e.setAttribute(k, a[k]); }); (kids || []).forEach(function (c) { if (c) e.appendChild(c); }); return e; }
+function fmt(n) { return n.toLocaleString(); }
+function hm(t) { var d = new Date(t * 1000); return ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2); }
+function hms(t) { var d = new Date(t * 1000); return hm(t) + ':' + ('0' + d.getSeconds()).slice(-2); }
+function drawChart(b) {
+  var svg = document.getElementById('svg'), W = svg.clientWidth || 800, H = 220, L = 36, B = 22, T = 8, n = b.counts.length;
+  var max = Math.max(4, Math.max.apply(null, b.counts)), step = Math.pow(10, Math.floor(Math.log10(max))), nice = Math.ceil(max / step) * step;
+  var bw = (W - L) / n, s = '', css = getComputedStyle(document.documentElement);
+  var acc = css.getPropertyValue('--acc'), grid = css.getPropertyValue('--grid'), dim = css.getPropertyValue('--dim');
+  for (var g = 0; g <= 4; g++) { var y = T + (H - T - B) * (1 - g / 4); s += '<line x1="' + L + '" x2="' + W + '" y1="' + y + '" y2="' + y + '" stroke="' + grid + '"/>';
+    s += '<text x="' + (L - 6) + '" y="' + (y + 4) + '" text-anchor="end" font-size="10" fill="' + dim + '">' + Math.round(nice * g / 4) + '</text>'; }
+  b.counts.forEach(function (c, i) {
+    var h = (H - T - B) * c / nice, x = L + i * bw + 1, w = Math.max(1, bw - 2), y = H - B - h;
+    if (c > 0) s += '<path d="M' + x + ',' + (H - B) + 'V' + (y + Math.min(4, h)) + 'q0,-' + Math.min(4, h) + ' ' + Math.min(4, w / 2) + ',-' + Math.min(4, h) + 'H' + (x + w - Math.min(4, w / 2)) + 'q' + Math.min(4, w / 2) + ',0 ' + Math.min(4, w / 2) + ',' + Math.min(4, h) + 'V' + (H - B) + 'Z" fill="' + acc + '"/>';
+    s += '<rect x="' + (L + i * bw) + '" y="' + T + '" width="' + bw + '" height="' + (H - T - B) + '" fill="transparent" data-i="' + i + '"/>';
+    if (i % 12 === 0) s += '<text x="' + (L + i * bw) + '" y="' + (H - 6) + '" font-size="10" fill="' + dim + '">' + hm(b.start + i * b.size) + '</text>';
+  });
+  svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H); svg.innerHTML = s;
+  var tip = document.getElementById('tip');
+  svg.querySelectorAll('rect[data-i]').forEach(function (r) {
+    r.addEventListener('mousemove', function (e) { var i = +r.dataset.i, t0 = b.start + i * b.size;
+      tip.style.display = 'block'; tip.textContent = hm(t0) + '–' + hm(t0 + b.size) + ': ' + fmt(b.counts[i]) + ' attempts';
+      var box = document.getElementById('chart').getBoundingClientRect(); tip.style.left = Math.min(e.clientX - box.left + 12, box.width - 180) + 'px'; tip.style.top = (e.clientY - box.top - 30) + 'px'; });
+    r.addEventListener('mouseleave', function () { tip.style.display = 'none'; });
+  });
+  var tb = document.getElementById('table'); if (!tb.hidden) { var rows = b.counts.map(function (c, i) { return '<tr><td>' + hm(b.start + i * b.size) + '</td><td>' + c + '</td></tr>'; }).reverse().join('');
+    tb.innerHTML = '<table><tr><th>From</th><th>Attempts</th></tr>' + rows + '</table>'; }
+}
+function render(d) {
+  var live = document.getElementById('live'); live.classList.toggle('on', d.connected);
+  live.lastChild.textContent = d.connected ? 'live from the camera machine' : 'not connected to the camera machine (retrying)';
+  LABELS = d.labels;
+  document.getElementById('t-today').textContent = fmt(d.today);
+  document.getElementById('t-hour').textContent = fmt(d.hour);
+  document.getElementById('t-rate').textContent = d.since_midnight_h > 0.1 ? fmt(Math.round(d.today / d.since_midnight_h)) : '–';
+  document.getElementById('t-up').textContent = fmt(d.uploads);
+  document.getElementById('t-upb').textContent = 'pictures it tried to upload (' + Math.round(d.upload_bytes / 1024) + ' KB)';
+  document.getElementById('t-person').textContent = fmt(d.persons);
+  drawChart(d.bins);
+  var cats = document.getElementById('cats'), top = d.categories.length ? d.categories[0].count : 1; cats.innerHTML = '';
+  d.categories.forEach(function (c) {
+    cats.appendChild(el('div', {'class': 'cat'}, [el('span', {'class': 'name', text: c.label}), el('div', {'class': 'bar'}, [el('i', {style: 'width:' + Math.max(1, 100 * c.count / top) + '%'})]),
+      el('span', {'class': 'n', text: fmt(c.count)}),
+      el('span', {'class': 'why', text: Object.keys(c.by_cam || {}).map(function (k) { return CAMNAME(k) + ' ' + fmt(c.by_cam[k]); }).join(' · ') + ' — ' + c.why})]));
+  });
+  var cb = document.getElementById('cams'); cb.innerHTML = '';
+  Object.keys(d.cameras || {}).forEach(function (k) {
+    var v = d.cameras[k], share = d.today ? Math.round(100 * v / d.today) : 0, top = d.categories.filter(function (c) { return (c.by_cam || {})[k]; })
+      .sort(function (a, b) { return b.by_cam[k] - a.by_cam[k]; }).slice(0, 2).map(function (c) { return c.label.toLowerCase(); }).join(', ');
+    cb.appendChild(el('div', {'class': 'tile'}, [el('b', {text: fmt(v)}), el('span', {text: CAMNAME(k) + ' · ' + share + ' % of all · ' + fmt((d.cameras_hour || {})[k] || 0) + ' last hour'}),
+      el('span', {style: 'display:block;margin-top:4px', text: 'mostly: ' + top})]));
+  });
+  var feed = document.getElementById('feed');
+  d.feed.forEach(function (e) {
+    var row = el('div', {'class': 'ev' + (first ? '' : ' new')}, [el('time', {text: hms(e.t)}), el('span', {'class': 'cam', text: CAMNAME(e.cam)}),
+      el('div', {}, [el('span', {'class': 'lbl', text: (LABELS[e.cat] || e.cat) + (e.n > 1 ? ' ×' + e.n : '')}), el('span', {'class': 'raw', text: e.text})])]);
+    feed.insertBefore(row, feed.firstChild);
+  });
+  while (feed.children.length > 300) feed.removeChild(feed.lastChild);
+  seq = d.seq || seq; first = false;
+}
+function poll() { fetch('/telemetry/data?since=' + seq).then(function (r) { return r.json(); }).then(render).catch(function () {}).then(function () { setTimeout(poll, 2000); }); }
+poll();
+function pics() {
+  fetch('/telemetry/uploads').then(function (r) { return r.json(); }).then(function (list) {
+    var box = document.getElementById('pics'); box.innerHTML = '';
+    list.slice(0, 20).forEach(function (m) { var u = '/telemetry/upload/' + m.file;
+      box.appendChild(el('a', {href: u, target: '_blank'}, [el('img', {src: u, loading: 'lazy', alt: 'caught upload'}), el('span', {text: new Date(m.time * 1000).toLocaleTimeString() + ' · ' + Math.round(m.size / 1024) + ' KB'})])); });
+    if (!list.length) box.appendChild(el('span', {'class': 'note', text: 'None today.'}));
+  }).catch(function () {});
+}
+pics(); setInterval(pics, 30000);
+document.getElementById('tbl').addEventListener('click', function () { var t = document.getElementById('table'); t.hidden = !t.hidden; this.textContent = t.hidden ? 'show as table' : 'hide table'; });
+window.addEventListener('resize', function () { fetch('/telemetry/data?since=' + 1e12).then(function (r) { return r.json(); }).then(function (d) { drawChart(d.bins); }); });
+</script></html>

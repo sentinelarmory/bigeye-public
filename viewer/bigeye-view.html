@@ -1,0 +1,662 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Sentinel-BigEye</title>
+<style>
+:root{--bg:#0e1013;--card:#171a1f;--card2:#1e2229;--line:#2a2f38;--txt:#e6e8eb;--dim:#8b93a1;--acc:#4da3ff;--ok:#3ecf6e;--bad:#ff5d5d;--warn:#ffb340}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--txt);font:14px/1.4 system-ui,-apple-system,"Segoe UI",sans-serif}
+header{display:flex;align-items:center;gap:10px;padding:10px 16px;border-bottom:1px solid var(--line);position:sticky;top:0;background:rgba(14,16,19,.92);backdrop-filter:blur(6px);z-index:6;flex-wrap:wrap}
+header h1{font-size:16px;margin:0;font-weight:700;letter-spacing:.3px}header h1 span{color:var(--acc)}header .sp{flex:1}
+#clock{color:var(--dim);font-variant-numeric:tabular-nums}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.seg button{background:transparent;color:var(--dim);border:0;padding:6px 12px;cursor:pointer;font:inherit}
+.seg button+button{border-left:1px solid var(--line)}.seg button.on{background:var(--acc);color:#fff}
+.seg button:hover{color:var(--txt)}
+main{padding:12px 16px;display:grid;gap:14px;grid-template-columns:repeat(2,minmax(0,1fr))}
+main.cols3{grid-template-columns:repeat(3,minmax(0,1fr))}main.cols1{grid-template-columns:minmax(0,1fr)}
+main.focus{grid-template-columns:minmax(0,3fr) minmax(0,1fr);align-items:start}
+main.focus .card:not(.big){grid-column:2}main.focus .card.big{grid-column:1;grid-row:1/span 9}
+main.focus .card:not(.big) .panel{display:none}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;overflow:hidden;display:flex;flex-direction:column}
+.vid{position:relative;background:#000;aspect-ratio:16/9;cursor:zoom-in;user-select:none}.big .vid{cursor:zoom-out}
+.vid img{width:100%;height:100%;object-fit:contain;display:block;-webkit-user-drag:none}
+.stale .vid img{opacity:.25;filter:grayscale(1)}
+.corner{position:absolute;display:flex;gap:6px;align-items:center;font-size:12px;font-weight:600;z-index:2}
+.pos-tl{left:10px;top:10px}.pos-tr{right:10px;top:10px;flex-direction:row-reverse}.pos-bl{left:10px;bottom:10px}.pos-br{right:10px;bottom:10px;flex-direction:row-reverse}
+.pos-hide{display:none!important}
+.pill{background:rgba(0,0,0,.6);padding:3px 9px;border-radius:999px;display:inline-flex;gap:6px;align-items:center}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--ok);box-shadow:0 0 8px var(--ok)}
+.stale .dot{background:var(--bad);box-shadow:0 0 8px var(--bad)}
+.recpill{display:none;color:var(--bad)}.rec .recpill{display:inline-flex}
+.motpill{display:none;color:var(--warn)}.moving .motpill{display:inline-flex}
+.infopill{color:var(--dim);font-weight:500}.infopill:empty{display:none}
+.ov{display:none;position:absolute;inset:0;align-items:center;justify-content:center;font:700 20px system-ui;color:var(--bad);text-shadow:0 2px 8px #000;pointer-events:none}
+.stale .ov{display:flex}
+.tools{opacity:0;transition:opacity .15s}
+.vid:hover .tools,.big .tools,.tools.always{opacity:1}
+.ib{width:36px;height:36px;border-radius:10px;border:1px solid rgba(255,255,255,.15);background:rgba(0,0,0,.6);color:#fff;cursor:pointer;font-size:16px;display:inline-flex;align-items:center;justify-content:center}
+.ib:hover{background:rgba(77,163,255,.35)}.ib.on{background:var(--bad);border-color:var(--bad)}
+.zones{position:absolute;pointer-events:none;z-index:1;display:none}.editing .zones{display:block}
+.editing .zones{pointer-events:auto;cursor:crosshair;outline:2px dashed var(--warn)}
+.zone{position:absolute;background:repeating-linear-gradient(45deg,rgba(255,179,64,.28) 0 6px,rgba(255,179,64,.1) 6px 12px);border:1px solid var(--warn)}
+.zone b{display:none;position:absolute;right:2px;top:2px;width:20px;height:20px;border-radius:6px;background:#000c;color:#fff;font:600 12px system-ui;align-items:center;justify-content:center;cursor:pointer}
+.editing .zone b{display:flex}
+.ailayer{position:absolute;pointer-events:none;z-index:1}.hide-ai .ailayer{display:none}
+.aibox{position:absolute;border:2px solid var(--ok);border-radius:4px;box-shadow:0 0 0 1px #0008}
+.aibox span{position:absolute;left:-2px;top:-20px;background:var(--ok);color:#000;font:600 11px system-ui;padding:2px 6px;border-radius:4px 4px 4px 0;white-space:nowrap}
+.aibox.known{border-color:#c79bff}.aibox.known span{background:#c79bff}
+.aibox.cat,.aibox.dog{border-color:var(--warn)}.aibox.cat span,.aibox.dog span{background:var(--warn)}
+.title{display:flex;align-items:center;gap:10px;padding:10px 14px;border-top:1px solid var(--line)}
+.title b{font-size:15px;text-transform:capitalize}.title .meta{color:var(--dim);font-size:12px;margin-left:auto}
+.panel{padding:4px 14px 14px;display:grid;gap:12px}
+.row{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.lbl{color:var(--dim);font-size:12px;min-width:92px}
+.btn{background:var(--card2);color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:7px 12px;cursor:pointer;font:inherit}
+.btn:hover{border-color:var(--acc)}.btn.on{background:var(--acc);border-color:var(--acc);color:#fff}
+.btn.danger{border-color:#5a2a2a;color:#ff9b9b}.btn.danger:hover{background:#3a1717}
+.slider{display:flex;align-items:center;gap:8px;flex:1;min-width:200px}
+.slider input{flex:1;accent-color:var(--acc)}.slider output{width:32px;text-align:right;color:var(--dim);font-variant-numeric:tabular-nums}
+.meter{flex:1;min-width:120px;height:8px;border-radius:4px;background:var(--card2);overflow:hidden;border:1px solid var(--line)}
+.meter i{display:block;height:100%;width:0;background:var(--ok);transition:width .3s}.meter.hot i{background:var(--warn)}
+.ptz{display:grid;grid-template-columns:repeat(3,52px);grid-template-rows:repeat(3,52px);gap:6px}
+.ptz button{border-radius:12px;font-size:20px;background:var(--card2);color:var(--txt);border:1px solid var(--line);cursor:pointer;user-select:none;touch-action:none}
+.ptz button:active,.ptz button.held{background:var(--acc);border-color:var(--acc)}
+.ptz .c{font-size:11px;color:var(--dim);display:flex;align-items:center;justify-content:center;text-align:center;line-height:1.2}
+.ptzwrap{display:flex;gap:18px;align-items:flex-start;flex-wrap:wrap}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin:6px 0}.hint{color:var(--dim);font-size:12px}
+.chip{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.chip button{background:var(--card2);color:var(--txt);border:0;padding:7px 11px;cursor:pointer;font:inherit}
+.chip button:hover{background:#26303d}.chip .x{color:var(--dim);border-left:1px solid var(--line);padding:7px 9px}.chip .x:hover{color:var(--bad)}
+details{border-top:1px solid var(--line);padding-top:10px}summary{cursor:pointer;color:var(--dim);font-size:12px}
+section.strip{padding:6px 16px 16px}section.strip h2{font-size:14px;color:var(--dim);font-weight:600;margin:6px 0 10px;display:flex;gap:10px;align-items:center}
+.list{display:flex;gap:10px;overflow-x:auto;padding-bottom:6px}
+.ev{flex:0 0 180px;background:var(--card);border:1px solid var(--line);border-radius:10px;overflow:hidden;font-size:12px}
+.ev img{width:180px;height:101px;object-fit:cover;display:block;background:#000}.ev div{padding:6px 8px}.ev a{color:var(--acc);text-decoration:none}
+#settings{position:fixed;right:16px;top:58px;z-index:8;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px;display:grid;gap:12px;box-shadow:0 10px 30px rgba(0,0,0,.5);width:min(420px,calc(100vw - 32px))}
+#settings[hidden]{display:none}#settings h3{margin:0;font-size:14px}
+#toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);display:flex;flex-direction:column;gap:6px;z-index:9;pointer-events:none;max-width:calc(100vw - 32px)}
+.t{background:#222833;border:1px solid var(--line);border-left:4px solid var(--acc);padding:9px 14px;border-radius:8px;box-shadow:0 6px 20px rgba(0,0,0,.4);animation:fade 4.5s forwards;word-break:break-all}
+.t.bad{border-left-color:var(--bad)}.t.ok{border-left-color:var(--ok)}
+@keyframes fade{0%{opacity:0;transform:translateY(6px)}6%{opacity:1;transform:none}88%{opacity:1}100%{opacity:0}}
+@media (max-width:900px){main,main.cols3,main.focus{grid-template-columns:minmax(0,1fr)}main.focus .card:not(.big){grid-column:1}main.focus .card.big{grid-row:auto}}
+</style>
+<header><h1>Sentinel-<span>BigEye</span></h1>
+<nav class="seg"><button class="on">📹 Cameras</button><button onclick="location.href='/telemetry'">📡 Call-home</button></nav>
+<span id="clock"></span><span class="sp"></span>
+<div class="seg" title="Open the folder on this PC"><button data-open="snapshots">📷 Pictures</button><button data-open="recordings">⏺ Recordings</button><button data-open="motion">🏃 Motion</button></div>
+<div class="seg" id="layout"><button data-l="cols1">1</button><button data-l="" class="on">2</button><button data-l="cols3">3</button></div>
+<div class="seg" id="homeseg" title="Home: nothing is recorded or sent. Away: people (and what you chose) are recorded."><button data-h="1">🏠 Home</button><button data-h="0">🛡 Away</button></div>
+<button class="btn" id="fixall" title="Restart the camera links on the camera machine (what helped when cameras dropped out)">🔄 Reconnect cameras</button>
+<button class="btn" id="autofix" title="Restart a camera's link by itself after 90 s without picture (at most every 10 min)">Auto-fix</button>
+<button class="btn" id="gear" title="Where the marks and buttons sit on the picture">⚙ Display</button>
+<button class="btn" id="fs" title="Full screen (F)">Full screen</button></header>
+<div id="settings" hidden><h3>Marks on the picture</h3><div id="setrows"></div>
+<div class="hint">Saved in this browser. Everything is saved on this PC under <span id="saveroot"></span></div>
+<h3 style="margin-top:6px">🐾 Your animals</h3>
+<div class="row"><span class="lbl">Cat's name</span><input id="catname" class="btn" placeholder="e.g. Whiskers" style="flex:1"><button class="btn" id="petsave">Save</button></div>
+<h3 style="margin-top:6px">👑 Faces it knows</h3><div id="faces" class="chips"></div>
+<div class="row"><input id="facename" class="btn" placeholder="Name, e.g. Alex" style="flex:1;min-width:160px"><select id="facecam" class="btn"></select>
+<button class="btn" id="facelearn">Learn this face</button></div>
+<div class="hint">Stand alone in view of that camera and look toward it now and then. It takes 15 pictures over about 20 s; more sessions (other places, with and without cap) make it better. Faces are stored only on this PC, as numbers.</div></div>
+<main id="grid"></main>
+<section class="strip" id="mv" hidden><h2>Motion events <span class="hint">picture when it started · click the clip to watch</span></h2><div class="list" id="mvlist"></div></section>
+<section class="strip" id="ev" hidden><h2>AI events (Frigate)</h2><div class="list" id="evlist"></div></section>
+<div id="toast"></div>
+<script>
+var CAMS = __CONFIG__;
+var SAVEROOT = __SAVEROOT__;
+function el(tag, attrs, kids) {
+  var e = document.createElement(tag);
+  Object.keys(attrs || {}).forEach(function (k) {
+    if (k === 'text') e.textContent = attrs[k];
+    else if (k.slice(0, 2) === 'on') e.addEventListener(k.slice(2), attrs[k]);
+    else e.setAttribute(k, attrs[k]);
+  });
+  (kids || []).forEach(function (c) { if (c) e.appendChild(c); });
+  return e;
+}
+function toast(text, kind) {
+  var t = el('div', {'class': 't ' + (kind || ''), text: text});
+  document.getElementById('toast').appendChild(t);
+  setTimeout(function () { t.remove(); }, 4600);
+}
+function store(key, val) { try { if (val === undefined) return localStorage.getItem(key); localStorage.setItem(key, val); } catch (e) { return null; } }
+function title(cam) { return cam.charAt(0).toUpperCase() + cam.slice(1); }
+function has(c, f) { return c.features.indexOf(f) >= 0; }
+function ctl(cam, path, note) {
+  return fetch('/ctl/' + cam + '/' + path).then(function (r) {
+    toast(title(cam) + ': ' + note + (r.ok ? '' : ' failed (' + r.status + ')'), r.ok ? 'ok' : 'bad');
+    return r.ok;
+  }).catch(function () { toast(title(cam) + ': ' + note + ' failed', 'bad'); return false; });
+}
+function text(url, opts) { return fetch(url, opts).then(function (r) { return r.text().then(function (t) { if (!r.ok) throw new Error(t || r.status); return t; }); }); }
+function json(url, opts) { return fetch(url, opts).then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); }); }
+function postJSON(url, obj) { return json(url, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(obj)}); }
+
+// A segmented choice. run(opt) returns a promise of true/false; on success the button lights up.
+function seg(opts, run, current) {
+  var wrap = el('div', {'class': 'seg'});
+  wrap.set = function (label) { wrap.querySelectorAll('button').forEach(function (x) { x.classList.toggle('on', x.textContent === label); }); };
+  opts.forEach(function (o) {
+    wrap.appendChild(el('button', {text: o.label, onclick: function () {
+      Promise.resolve(run(o)).then(function (ok) { if (ok !== false) wrap.set(o.label); });
+    }}));
+  });
+  if (current) wrap.set(current);
+  return wrap;
+}
+// Camera setting that the camera does not report back: remember the last pick in this browser.
+function choice(cam, key, opts) {
+  var s = seg(opts, function (o) { return ctl(cam, o.path, o.note).then(function (ok) { if (ok) store(cam + ':' + key, o.label); return ok; }); },
+    store(cam + ':' + key));
+  return s;
+}
+function row(label, kids) { return el('div', {'class': 'row'}, [el('span', {'class': 'lbl', text: label})].concat(kids)); }
+function slider(label, value, min, onchange) {
+  var out = el('output', {text: String(value)}), timer = null;
+  var input = el('input', {type: 'range', min: String(min), max: '100', value: String(value), oninput: function () {
+    out.textContent = input.value; clearTimeout(timer);
+    timer = setTimeout(function () { onchange(+input.value); }, 350);
+  }});
+  var r = row(label, [el('div', {'class': 'slider'}, [input, out])]);
+  r.setValue = function (v) { input.value = v; out.textContent = v; };
+  return r;
+}
+
+// ---------- 360 camera: absolute positions, so any position can be saved
+var ptzTimer = null, PTZ_REPEAT = 350;
+function ptzMove(cam, dir) {
+  return json('/ptz/' + cam + '/move?dir=' + dir).then(function (s) { showPos(cam, s); })
+    .catch(function () { toast(title(cam) + ': camera did not take the move', 'bad'); ptzStop(); });
+}
+function ptzStart(cam, dir, btn) { ptzStop(); ptzMove(cam, dir); if (btn) btn.classList.add('held');
+  ptzTimer = setInterval(function () { ptzMove(cam, dir); }, PTZ_REPEAT); }
+function ptzStop() { clearInterval(ptzTimer); ptzTimer = null;
+  document.querySelectorAll('.ptz .held').forEach(function (b) { b.classList.remove('held'); }); }
+function showPos(cam, s) {
+  var p = document.getElementById('pos-' + cam);
+  if (p) p.textContent = 'pan ' + Math.round(s.x * 100) + '%\ntilt ' + Math.round(s.y * 100) + '%';
+}
+function ptzPad(cam) {
+  var pad = el('div', {'class': 'ptz'});
+  [['', ''], ['up', '▲'], ['', ''], ['left', '◀'], ['pos', ''], ['right', '▶'], ['', ''], ['down', '▼'], ['', '']]
+    .forEach(function (d) {
+      if (!d[0]) { pad.appendChild(el('span')); return; }
+      if (d[0] === 'pos') { pad.appendChild(el('div', {'class': 'c', id: 'pos-' + cam, style: 'white-space:pre'})); return; }
+      var b = el('button', {text: d[1], title: d[0]});
+      b.addEventListener('pointerdown', function (e) { e.preventDefault(); ptzStart(cam, d[0], b); });
+      ['pointerup', 'pointerleave', 'pointercancel'].forEach(function (ev) { b.addEventListener(ev, ptzStop); });
+      pad.appendChild(b);
+    });
+  return pad;
+}
+function renderPresets(cam, s) {
+  var box = document.getElementById('presets-' + cam); if (!box) return;
+  box.innerHTML = '';
+  s.presets.forEach(function (p) {
+    box.appendChild(el('span', {'class': 'chip'}, [
+      el('button', {text: p.name, title: 'Go to ' + p.name, onclick: function () {
+        json('/ptz/' + cam + '/go?name=' + encodeURIComponent(p.name)).then(function (s) { showPos(cam, s); toast(title(cam) + ': going to ' + p.name, 'ok'); })
+          .catch(function () { toast(title(cam) + ': could not reach the camera', 'bad'); });
+      }}),
+      el('button', {'class': 'x', text: '×', title: 'Delete ' + p.name, onclick: function () {
+        if (!confirm('Delete the position "' + p.name + '"?')) return;
+        json('/ptz/' + cam + '/delete?name=' + encodeURIComponent(p.name)).then(function (s) { renderPresets(cam, s); });
+      }})]));
+  });
+  if (!s.presets.length) box.appendChild(el('span', {'class': 'hint', text: 'No positions yet.'}));
+}
+function savePreset(cam) {
+  var name = prompt('Name for this position (same name replaces the old one):');
+  if (!name) return;
+  json('/ptz/' + cam + '/save?name=' + encodeURIComponent(name)).then(function (s) { renderPresets(cam, s); toast(title(cam) + ': saved "' + name + '"', 'ok'); })
+    .catch(function () { toast('Could not save the position', 'bad'); });
+}
+
+// ---------- snapshots and recordings: saved on this PC
+function snap(cam) {
+  text('/snap/' + cam).then(function (t) { toast(title(cam) + ': ' + t, 'ok'); }).catch(function (e) { toast(title(cam) + ': snapshot failed: ' + e.message, 'bad'); });
+}
+function rec(cam) {
+  text('/rec/' + cam + '?action=toggle').then(function (t) { toast(title(cam) + ': ' + t, 'ok'); poll(); })
+    .catch(function (e) { toast(title(cam) + ': recording failed: ' + e.message, 'bad'); });
+}
+function listen(cam, btn) {
+  var a = document.getElementById('a-' + cam);
+  if (a.paused) { a.src = '/listen/' + cam + '?t=' + Date.now(); a.play(); btn.classList.add('on'); toast(title(cam) + ': listening (a few seconds delay)'); }
+  else { a.pause(); a.removeAttribute('src'); a.load(); btn.classList.remove('on'); toast(title(cam) + ': stopped listening'); }
+}
+function syncClock(cam) {
+  fetch('/ctl/' + cam + '/control/time', {method: 'POST'}).then(function (r) { toast(title(cam) + (r.ok ? ': clock set to this PC\'s time' : ': clock sync failed'), r.ok ? 'ok' : 'bad'); });
+}
+function reboot(cam) {
+  if (!confirm('Restart the ' + cam + ' camera? The picture is gone for about a minute.')) return;
+  fetch('/ctl/' + cam + '/reboot', {method: 'POST'}).then(function (r) { toast(title(cam) + (r.ok ? ': restart sent' : ': restart failed'), r.ok ? 'ok' : 'bad'); });
+}
+
+// ---------- sleep settings of the battery cameras (read from the camera, written back to it)
+var SLEEP_FLAGS = [{key: 'sleep_enabled', bit: 1, label: 'Sleep mode', tip: 'The camera sleeps to save battery (it then drops off the page)'},
+  {key: 'sleep_when_idle', bit: 4, label: 'Sleep when nobody watches', tip: 'Goes to sleep when no viewer is connected'},
+  {key: 'no_sleep_on_power', bit: 8, label: 'Stay awake on charger', tip: 'Never sleeps while the cable is in'},
+  {key: 'lan_wakeup', bit: 2, label: 'Wake up from the network', tip: 'Can be woken over Wi-Fi'}];
+function sleepPanel(cam) {
+  var box = el('div', {'class': 'panel', style: 'padding:0;gap:8px'}), info = el('div', {'class': 'hint', text: 'Reading from the camera...'});
+  var segs = {};
+  SLEEP_FLAGS.forEach(function (f) {
+    segs[f.key] = seg([{label: 'On', v: true}, {label: 'Off', v: false}], function (o) {
+      var q = o.v ? 'set=' + f.bit + '&clear=0' : 'set=0&clear=' + f.bit;
+      return fetch('/ctl/' + cam + '/control/sleepflags?' + q, {method: 'POST'}).then(function (r) {
+        toast(title(cam) + ': ' + f.label.toLowerCase() + ' ' + (o.v ? 'on' : 'off') + (r.ok ? '' : ' failed (read the settings first)'), r.ok ? 'ok' : 'bad');
+        setTimeout(load, 1500); return r.ok; });
+    });
+    var r = row(f.label, [segs[f.key]]); r.title = f.tip; box.appendChild(r);
+  });
+  function load() {
+    json('/sleepcfg/' + cam).then(function (c) {
+      SLEEP_FLAGS.forEach(function (f) { segs[f.key].set(c[f.key] ? 'On' : 'Off'); });
+      info.textContent = 'From the camera: battery ' + c.battery_pct + '% (' + c.battery_mv + ' mV) · PIR level ' + c.pir_level + ' · settings stay on the camera';
+    }).catch(function () { info.textContent = 'The camera did not answer (asleep or off). Open again when it is awake.'; });
+  }
+  var d = el('details', {}, [el('summary', {text: 'Sleep and battery (camera settings)'}), el('div', {style: 'margin-top:10px'}, [box, info,
+    el('button', {'class': 'btn', text: 'Read again', onclick: load})])]);
+  d.addEventListener('toggle', function () { if (d.open) load(); });
+  return d;
+}
+
+// ---------- ignore zones drawn on the picture
+var MOTION = {};  // camera -> its motion settings from the server
+function picRect(card) {
+  // Where the picture really is inside the 16:9 box (object-fit: contain).
+  var vid = card.querySelector('.vid'), img = card.querySelector('img');
+  var W = vid.clientWidth, H = vid.clientHeight, r = (img.naturalWidth && img.naturalHeight) ? img.naturalWidth / img.naturalHeight : 16 / 9;
+  var w = Math.min(W, H * r), h = w / r;
+  return {left: (W - w) / 2, top: (H - h) / 2, width: w, height: h};
+}
+function layoutZones(card) {
+  var r = picRect(card);
+  ['.zones', '.ailayer'].forEach(function (sel) { var z = card.querySelector(sel); if (!z) return;
+    z.style.left = r.left + 'px'; z.style.top = r.top + 'px'; z.style.width = r.width + 'px'; z.style.height = r.height + 'px'; });
+}
+function drawZones(cam) {
+  var card = document.getElementById('card-' + cam), z = card.querySelector('.zones');
+  z.querySelectorAll('.zone').forEach(function (n) { n.remove(); });
+  var cnt = card.querySelector('.zonecount');
+  if (cnt) { var k = (MOTION[cam].zones || []).length, where = MOTION[cam].zones_for ? ' for position "' + MOTION[cam].zones_for + '"' : (has(CAMS.filter(function (c) { return c.name === cam; })[0], 'ptz') ? ' (no saved position here)' : '');
+    cnt.textContent = (k ? k + ' zone' + (k > 1 ? 's' : '') : 'no zones') + where + (k ? ' · shown only while drawing' : ''); }
+  (MOTION[cam].zones || []).forEach(function (q, i) {
+    var n = el('div', {'class': 'zone', style: 'left:' + q[0] * 100 + '%;top:' + q[1] * 100 + '%;width:' + (q[2] - q[0]) * 100 + '%;height:' + (q[3] - q[1]) * 100 + '%'},
+      [el('b', {text: '×', title: 'Remove this zone', onpointerdown: function (e) { e.stopPropagation(); }, onclick: function (e) {
+        e.stopPropagation(); MOTION[cam].zones.splice(i, 1); saveMotion(cam, {zones: MOTION[cam].zones}); }})]);
+    z.appendChild(n);
+  });
+  layoutZones(card);
+}
+function saveMotion(cam, change) {
+  return postJSON('/settings/' + cam, change).then(function (m) { MOTION[cam] = m; drawZones(cam); return true; })
+    .catch(function () { toast(title(cam) + ': could not save the setting', 'bad'); return false; });
+}
+function zoneEditor(cam, card) {
+  var z = card.querySelector('.zones'), start = null, live = null;
+  function at(e) { var b = z.getBoundingClientRect();
+    return [Math.min(1, Math.max(0, (e.clientX - b.left) / b.width)), Math.min(1, Math.max(0, (e.clientY - b.top) / b.height))]; }
+  z.addEventListener('pointerdown', function (e) {
+    if (!card.classList.contains('editing')) return;
+    e.preventDefault(); e.stopPropagation(); z.setPointerCapture(e.pointerId);
+    start = at(e); live = el('div', {'class': 'zone'}); z.appendChild(live);
+  });
+  z.addEventListener('pointermove', function (e) {
+    if (!start) return; var p = at(e);
+    live.style.left = Math.min(start[0], p[0]) * 100 + '%'; live.style.top = Math.min(start[1], p[1]) * 100 + '%';
+    live.style.width = Math.abs(p[0] - start[0]) * 100 + '%'; live.style.height = Math.abs(p[1] - start[1]) * 100 + '%';
+  });
+  z.addEventListener('pointerup', function (e) {
+    if (!start) return; var p = at(e), q = [Math.min(start[0], p[0]), Math.min(start[1], p[1]), Math.max(start[0], p[0]), Math.max(start[1], p[1])];
+    start = null; live.remove();
+    if (q[2] - q[0] < 0.02 || q[3] - q[1] < 0.02) return;  // a click, not a drag
+    MOTION[cam].zones = (MOTION[cam].zones || []).concat([q]);
+    saveMotion(cam, {zones: MOTION[cam].zones}).then(function () { toast(title(cam) + ': ignore zone added', 'ok'); });
+  });
+  z.addEventListener('click', function (e) { if (card.classList.contains('editing')) e.stopPropagation(); });
+}
+function motionPanel(c, card) {
+  var cam = c.name;
+  var meter = el('div', {'class': 'meter', title: 'How close the picture is to setting off the sensor'}, [el('i')]);
+  card.meter = meter;
+  var onoff = seg([{label: 'On', v: true}, {label: 'Off', v: false}], function (o) {
+    return saveMotion(cam, {on: o.v}).then(function (ok) { if (ok) toast(title(cam) + ': motion sensor ' + (o.v ? 'on' : 'off'), 'ok'); return ok; }); });
+  var sens = slider('Sensitivity', 50, 1, function (v) { saveMotion(cam, {sens: v}); });
+  var drawBtn = el('button', {'class': 'btn', text: 'Draw / show ignore zones', onclick: function () {
+    var on = !card.classList.contains('editing');
+    card.classList.toggle('editing', on); drawBtn.classList.toggle('on', on);
+    drawBtn.textContent = on ? 'Done drawing' : 'Draw / show ignore zones';
+    layoutZones(card);
+    if (on) toast('Drag on the picture to mark places the sensor should ignore. Click × on a zone to remove it.');
+  }});
+  var recSeg = seg([{label: 'Record', v: true}, {label: 'Don\'t record', v: false}], function (o) { return saveMotion(cam, {record: o.v}); });
+  var REC_ON = [{label: '🧍 Person', v: 'person'}, {label: '🧍🐈 Person or animal', v: 'person_animal'}, {label: '🐈 Animal', v: 'animal'}, {label: 'Any movement', v: 'motion'}];
+  var whenSeg = seg(REC_ON, function (o) { return saveMotion(cam, {record_on: o.v}).then(function (ok) { if (ok) toast(title(cam) + ': records when it sees ' + o.label.replace(/^\S+ /, '').toLowerCase(), 'ok'); return ok; }); });
+  var knownSeg = seg([{label: 'Don\'t record them', v: true}, {label: 'Record them too', v: false}], function (o) { return saveMotion(cam, {skip_known: o.v}); });
+  var phone = seg([{label: 'Phone message', v: true}, {label: 'No message', v: false}], function (o) { return saveMotion(cam, {notify: o.v}); });
+  json('/settings/' + cam).then(function (m) {
+    MOTION[cam] = m; onoff.set(m.on ? 'On' : 'Off'); sens.setValue(m.sens);
+    whenSeg.set(REC_ON.filter(function (o) { return o.v === m.record_on; })[0].label);
+    recSeg.set(m.record === false ? 'Don\'t record' : 'Record'); knownSeg.set(m.skip_known === false ? 'Record them too' : 'Don\'t record them'); phone.set(m.notify ? 'Phone message' : 'No message'); drawZones(cam);
+  });
+  zoneEditor(cam, card);
+  return el('div', {'class': 'panel', style: 'padding:0;gap:10px'}, [
+    row('Motion sensor', [onoff, meter]), row('Record when', [whenSeg]),
+    el('div', {'class': 'hint', text: 'Movement wakes it up; the AI (on this PC) checks what it is. A person on the TV counts too: draw an ignore zone over the TV.'}), sens,
+    row('Ignore zones', [drawBtn, el('button', {'class': 'btn', text: 'Clear all', onclick: function () {
+      if (confirm('Remove all ignore zones on ' + cam + '?')) saveMotion(cam, {zones: []}); }}), el('span', {'class': 'hint zonecount'})]),
+    row('On motion', [recSeg, phone]),
+    row('Known faces', [knownSeg]),
+    has(c, 'ptz')
+      ? el('div', {'class': 'hint', text: 'The sensor pauses while this camera turns. Zones belong to the picture, so they fit only the position they were drawn in.'}) : null]);
+}
+
+// ---------- marks on the picture: where they sit, chosen by the viewer
+var MARKS = [{key: 'live', label: 'LIVE mark', def: 'tl'}, {key: 'marks', label: 'REC / motion marks', def: 'tl'},
+             {key: 'info', label: 'Battery / info', def: 'bl'}, {key: 'tools', label: 'Buttons (📷 ⏺ ⛶)', def: 'tr'}];
+var CORNERS = [{label: '↖', v: 'tl'}, {label: '↗', v: 'tr'}, {label: '↙', v: 'bl'}, {label: '↘', v: 'br'}, {label: 'Hide', v: 'hide'}];
+function markPos(key) { var m = MARKS.filter(function (x) { return x.key === key; })[0]; return store('mark:' + key) || m.def; }
+function applyMarks() {
+  MARKS.forEach(function (m) {
+    var pos = markPos(m.key);
+    document.querySelectorAll('.corner.m-' + m.key).forEach(function (n) {
+      n.className = n.className.replace(/\bpos-\w+/g, '').trim() + ' pos-' + pos;
+    });
+  });
+  // Marks that share a corner sit next to each other: put them in one row.
+  document.querySelectorAll('.card').forEach(function (card) {
+    var used = {};
+    ['live', 'marks', 'info', 'tools'].forEach(function (k) {
+      var n = card.querySelector('.m-' + k), pos = markPos(k);
+      if (!n || pos === 'hide') return;
+      var shift = used[pos] || 0, vert = pos[0] === 't' ? 'top' : 'bottom';
+      n.style.top = n.style.bottom = '';
+      n.style[vert] = (10 + shift) + 'px';
+      used[pos] = shift + (k === 'tools' ? 44 : 28);
+    });
+  });
+  var tl = document.querySelectorAll('.tools'); tl.forEach(function (t) { t.classList.toggle('always', store('mark:toolsAlways') === '1'); });
+}
+function settingsPanel() {
+  var rows = document.getElementById('setrows');
+  MARKS.forEach(function (m) {
+    rows.appendChild(row(m.label, [seg(CORNERS, function (o) { store('mark:' + m.key, o.v); applyMarks(); },
+      CORNERS.filter(function (c) { return c.v === markPos(m.key); })[0].label)]));
+  });
+  rows.appendChild(row('AI boxes', [seg([{label: 'Show', v: '1'}, {label: 'Hide', v: '0'}], function (o) { store('mark:ai', o.v); document.body.classList.toggle('hide-ai', o.v === '0'); },
+    store('mark:ai') === '0' ? 'Hide' : 'Show')]));
+  document.body.classList.toggle('hide-ai', store('mark:ai') === '0');
+  rows.appendChild(row('Buttons shown', [seg([{label: 'On hover', v: '0'}, {label: 'Always', v: '1'}], function (o) { store('mark:toolsAlways', o.v); applyMarks(); },
+    store('mark:toolsAlways') === '1' ? 'Always' : 'On hover')]));
+  document.getElementById('saveroot').textContent = SAVEROOT;
+  document.getElementById('gear').addEventListener('click', function (e) { e.stopPropagation(); var s = document.getElementById('settings'); s.hidden = !s.hidden; });
+  document.getElementById('settings').addEventListener('click', function (e) { e.stopPropagation(); });
+  document.addEventListener('click', function () { document.getElementById('settings').hidden = true; });
+}
+
+// ---------- live pictures: one short request per picture (never a connection left open,
+// so buttons are not stuck behind video streams; browsers allow only 6 connections per server).
+function liveLoop(cam, img) {
+  var after = 0, url = null;
+  function next() {
+    if (document.hidden) { setTimeout(next, 500); return; }
+    fetch('/frame/' + cam + '?after=' + after, {cache: 'no-store'}).then(function (r) {
+      if (r.status === 204) return null;
+      if (!r.ok) throw new Error(r.status);
+      after = r.headers.get('X-Stamp') || after;
+      return r.blob();
+    }).then(function (b) {
+      if (b) { var old = url; url = URL.createObjectURL(b); img.src = url; if (old) setTimeout(function () { URL.revokeObjectURL(old); }, 1000); }
+      next();
+    }).catch(function () { setTimeout(next, 2000); });
+  }
+  next();
+}
+
+// ---------- cards
+var grid = document.getElementById('grid'), focused = null;
+function setFocus(card) {
+  var on = card && focused !== card;
+  document.querySelectorAll('.card').forEach(function (c) { c.classList.remove('big'); });
+  grid.classList.toggle('focus', !!on);
+  focused = on ? card : null;
+  if (on) { card.classList.add('big'); grid.prepend(card); }
+  else CAMS.forEach(function (c) { grid.appendChild(document.getElementById('card-' + c.name)); });
+  setTimeout(function () { document.querySelectorAll('.card').forEach(layoutZones); }, 50);
+}
+CAMS.forEach(function (c) {
+  var n = c.name, card;
+  var img = el('img', {alt: n, draggable: 'false'});
+  var recBtn = el('button', {'class': 'ib recbtn', title: 'Start / stop recording', text: '⏺', onclick: function (e) { e.stopPropagation(); rec(n); }});
+  var tools = el('div', {'class': 'corner tools m-tools'}, [
+    el('button', {'class': 'ib', title: 'Snapshot (saved on this PC)', text: '📷', onclick: function (e) { e.stopPropagation(); snap(n); }}),
+    recBtn,
+    has(c, 'listen') ? el('button', {'class': 'ib', title: 'Listen', text: '🔊', onclick: function (e) { e.stopPropagation(); listen(n, this); }}) : null,
+    el('button', {'class': 'ib', title: 'Focus', text: '⛶', onclick: function (e) { e.stopPropagation(); setFocus(card); }})
+  ]);
+  var vid = el('div', {'class': 'vid', onclick: function () { if (!card.classList.contains('editing')) setFocus(card); }}, [img,
+    el('div', {'class': 'zones'}), el('div', {'class': 'ailayer'}),
+    el('div', {'class': 'corner m-live'}, [el('span', {'class': 'pill'}, [el('span', {'class': 'dot'}), el('span', {'class': 'state', text: '...'})])]),
+    el('div', {'class': 'corner m-marks'}, [el('span', {'class': 'pill recpill', text: '● REC'}), el('span', {'class': 'pill motpill', text: '🏃 MOTION'})]),
+    el('div', {'class': 'corner m-info'}, [el('span', {'class': 'pill infopill'})]),
+    el('div', {'class': 'ov', text: 'NO PICTURE'}), tools]);
+  img.addEventListener('load', function () { layoutZones(card); });
+  var panel = el('div', {'class': 'panel'});
+  if (c.controls && has(c, 'ptz')) {
+    panel.appendChild(el('div', {'class': 'ptzwrap'}, [ptzPad(n), el('div', {style: 'flex:1;min-width:200px'}, [
+      el('div', {'class': 'lbl', text: 'Favourite positions'}), el('div', {'class': 'chips', id: 'presets-' + n}),
+      el('button', {'class': 'btn', text: '＋ Save this position', onclick: function () { savePreset(n); }}),
+      el('div', {'class': 'hint', style: 'margin-top:6px', text: 'Hold an arrow to keep turning (arrow keys work when this camera is in focus). Aim, then save.'})])]));
+    panel.appendChild(row('Night mode', [choice(n, 'night', [{label: 'Auto', path: 'night?mode=auto', note: 'night mode auto'},
+      {label: 'On', path: 'night?mode=on', note: 'night mode on'}, {label: 'Off', path: 'night?mode=off', note: 'night mode off'}])]));
+    // BigEye's own follow: the AI sees the person, the page turns the camera (no green frame).
+    var fMode = seg([{label: 'Off', v: 'off'}, {label: '🧍 People', v: 'person'}, {label: '🧍🐈 People + animals', v: 'person_animal'}], function (o) {
+      return postJSON('/follow/' + n, {mode: o.v}).then(function () { toast(title(n) + ': follow ' + (o.v === 'off' ? 'off' : 'on, ' + o.label.replace(/^\S+ /, '').toLowerCase()), 'ok'); return true; }); });
+    var fHome = el('select', {'class': 'btn', title: 'Where it goes back to when nobody has been seen for a minute', onchange: function () {
+      postJSON('/follow/' + n, {home: fHome.value}).then(function () { toast(title(n) + ': ' + (fHome.value ? 'goes back to ' + fHome.value + ' when nobody is around' : 'stays where it is'), 'ok'); }); }});
+    var fLearn = el('button', {'class': 'btn', text: '🎓 Learn my camera', title: 'Moves a little each way and measures the picture, so following fits this camera and mounting (about 40 s). Aim at something with detail first, not a bare wall.', onclick: function () {
+      fLearn.disabled = true; fLearn.textContent = '🎓 Learning... (about 40 s)';
+      toast(title(n) + ': learning, the camera moves a little each way');
+      json('/addon/follow-learn/' + n, {method: 'POST'}).then(function (r) {
+        toast(title(n) + ': pan ' + r.pan + ' · tilt ' + r.tilt, 'ok');
+      }).catch(function () { toast(title(n) + ': learning failed', 'bad'); }).then(function () { fLearn.disabled = false; fLearn.textContent = '🎓 Learn my camera'; });
+    }});
+    json('/follow/' + n).then(function (c) {
+      fMode.set({off: 'Off', person: '🧍 People', person_animal: '🧍🐈 People + animals'}[c.mode || 'off']);
+      json('/ptz/' + n + '/info').then(function (s) {
+        fHome.appendChild(el('option', {value: '', text: 'Back to: stay put'}));
+        s.presets.forEach(function (p) { var o = el('option', {value: p.name, text: 'Back to: ' + p.name}); if (p.name === c.home) o.selected = true; fHome.appendChild(o); });
+      });
+    });
+    panel.appendChild(row('Follow (BigEye)', [fMode]));
+    panel.appendChild(row('', [fHome, fLearn, el('span', {'class': 'hint', id: 'follow-' + n})]));
+    panel.appendChild(row('Camera\'s own tracking', [choice(n, 'track2', [{label: 'On', path: 'tracking?on=1', note: 'camera tracking on (its own, with the green frame); turn BigEye follow off to avoid a tug of war'},
+      {label: 'Off', path: 'tracking?on=0', note: 'tracking off: camera stays where you put it'}])]));
+    panel.appendChild(row('Quality', [choice(n, 'q', [{label: 'Full HD', path: 'quality?q=fhd', note: 'Full HD'}, {label: 'Low (640x360)', path: 'quality?q=hd', note: 'low quality 640x360 (the camera calls it HD)'}])]));
+    // This camera has no brightness/contrast command we know of: the page adjusts the picture
+    // itself (also what is recorded and what the motion sensor sees). 0 = as the camera sends it.
+    var bSl = slider('Brightness', 0, -100, function (v) { postJSON('/settings/' + n, {brightness: v}).then(function () { toast(title(n) + ': brightness ' + v + ' (picture back in 2-5 s)', 'ok'); }); });
+    var cSl = slider('Contrast', 0, -100, function (v) { postJSON('/settings/' + n, {contrast: v}).then(function () { toast(title(n) + ': contrast ' + v + ' (picture back in 2-5 s)', 'ok'); }); });
+    json('/settings/' + n).then(function (m) { bSl.setValue(m.picture.brightness); cSl.setValue(m.picture.contrast); });
+    panel.appendChild(bSl); panel.appendChild(cSl);
+    json('/ptz/' + n + '/info').then(function (s) { renderPresets(n, s); showPos(n, s); });
+  } else if (c.controls) {
+    var ir = choice(n, 'ir', [{label: 'On', path: 'ir?on=1', note: 'night vision on'}, {label: 'Off', path: 'ir?on=0', note: 'night vision off'}]);
+    json('/irstate/' + n).then(function (s) { if (s.on !== undefined) { ir.set(s.on ? 'On' : 'Off'); store(n + ':ir', s.on ? 'On' : 'Off'); } }).catch(function () {});
+    panel.appendChild(row('Night vision', [ir]));
+    panel.appendChild(row('Work light', [choice(n, 'light', [{label: 'On', path: 'control/light?on=1', note: 'work light on'}, {label: 'Off', path: 'control/light?on=0', note: 'work light off'}])]));
+    if (has(c, 'pir')) panel.appendChild(row('Camera PIR', [choice(n, 'pir', [{label: 'On', path: 'pir?on=1', note: 'camera PIR on'}, {label: 'Off', path: 'pir?on=0', note: 'camera PIR off'}])]));
+    panel.appendChild(slider('Brightness', +(store(n + ':brightness') || 50), 0, function (v) { store(n + ':brightness', v); ctl(n, 'control/picture?brightness=' + v, 'brightness ' + v); }));
+    panel.appendChild(slider('Contrast', +(store(n + ':contrast') || 50), 0, function (v) { store(n + ':contrast', v); ctl(n, 'control/picture?contrast=' + v, 'contrast ' + v); }));
+    panel.appendChild(row('Picture', [el('button', {'class': 'btn', text: 'Flip', onclick: function () { ctl(n, 'control/picture?turn=flip', 'flipped'); }}),
+      el('button', {'class': 'btn', text: 'Mirror', onclick: function () { ctl(n, 'control/picture?turn=mirror', 'mirrored'); }})]));
+    // Two real stream sizes (tested on the door camera 2026-11-14): any small size gives 640x360.
+    panel.appendChild(row('Quality', [choice(n, 'res', [{label: 'Full HD', path: 'control/resolution?size=1920x1080', note: 'Full HD (picture back in a few seconds)'},
+      {label: 'Low (640x360)', path: 'control/resolution?size=640x360', note: 'low quality, easier on weak Wi-Fi'}]),
+      el('button', {'class': 'btn', text: 'Refresh picture', title: 'Ask the camera for a fresh full picture (fixes smearing)', onclick: function () {
+        fetch('/ctl/' + n + '/control/keyframe', {method: 'POST'}).then(function (r) { toast(title(n) + (r.ok ? ': fresh picture asked for' : ': failed'), r.ok ? 'ok' : 'bad'); }); }})]));
+    if (has(c, 'pir')) panel.appendChild(sleepPanel(n));  // battery W2 model (window); the door camera does not answer it
+  }
+  var motionBox = el('div', {style: 'margin-top:10px'});
+  panel.appendChild(el('details', {}, [el('summary', {text: 'Motion sensor (BigEye)'}), motionBox]));
+  if (c.controls) panel.appendChild(el('details', {}, [el('summary', {text: 'More'}), el('div', {'class': 'row', style: 'margin-top:10px'},
+    [!has(c, 'ptz') ? el('button', {'class': 'btn', text: 'Sync clock', title: 'Set the camera clock to this PC\'s time', onclick: function () { syncClock(n); }}) : null,
+     has(c, 'ptz') ? el('button', {'class': 'btn', text: 'Swap left/right', onclick: function () { json('/ptz/' + n + '/invert?axis=pan').then(function (s) { toast('Left/right ' + (s.invert_pan ? 'swapped' : 'normal'), 'ok'); }); }}) : null,
+     has(c, 'ptz') ? el('button', {'class': 'btn', text: 'Swap up/down', onclick: function () { json('/ptz/' + n + '/invert?axis=tilt').then(function (s) { toast('Up/down ' + (s.invert_tilt ? 'swapped' : 'normal'), 'ok'); }); }}) : null,
+     el('button', {'class': 'btn danger', text: 'Restart camera', onclick: function () { reboot(n); }})])]));
+  if (c.controls) panel.insertBefore(row('If it drops out', [
+    !has(c, 'ptz') ? el('button', {'class': 'btn', text: '⏻ Restart camera', title: 'Sends a restart to the camera itself. Picture back in about 20-40 s. Works when the camera still answers (not when it sleeps).',
+      onclick: function () { reboot(n); }}) : null,
+    el('button', {'class': 'btn', text: '🔄 Reconnect link', title: 'Restarts only the link to this camera on the camera machine', onclick: function () { reconnect(n, this); }})]), panel.lastChild);
+  var meta = el('span', {'class': 'meta'});
+  card = el('div', {'class': 'card', id: 'card-' + n}, [vid, el('div', {'class': 'title'}, [el('b', {text: n}), meta]), panel,
+    has(c, 'listen') ? el('audio', {id: 'a-' + n, preload: 'none'}) : null]);
+  card.meta = meta; card.recBtn = recBtn;
+  motionBox.appendChild(motionPanel(c, card));
+  grid.appendChild(card);
+  liveLoop(n, img);
+});
+window.addEventListener('resize', function () { document.querySelectorAll('.card').forEach(layoutZones); });
+settingsPanel(); applyMarks();
+function loadFaces() {
+  json('/faces').then(function (f) {
+    var box = document.getElementById('faces'); box.innerHTML = '';
+    Object.keys(f).forEach(function (n) {
+      box.appendChild(el('span', {'class': 'chip'}, [el('button', {text: '👑 ' + n + ' · ' + f[n]}), el('button', {'class': 'x', text: '×', title: 'Forget ' + n, onclick: function () {
+        if (confirm('Forget the face of ' + n + '?')) json('/faces/delete?name=' + encodeURIComponent(n), {method: 'POST'}).then(loadFaces); }})]));
+    });
+    if (!Object.keys(f).length) box.appendChild(el('span', {'class': 'hint', text: 'None yet.'}));
+  }).catch(function () {});
+}
+CAMS.forEach(function (c) { document.getElementById('facecam').appendChild(el('option', {value: c.name, text: title(c.name)})); });
+loadFaces();
+json('/pets').then(function (p) { document.getElementById('catname').value = p.cat || ''; });
+document.getElementById('petsave').addEventListener('click', function () {
+  postJSON('/pets', {cat: document.getElementById('catname').value}).then(function (p) { toast(p.cat ? '🐾 The cat is now called ' + p.cat : 'Cat name removed', 'ok'); });
+});
+document.getElementById('facelearn').addEventListener('click', function () {
+  var btn = this, name = document.getElementById('facename').value.trim(), cam = document.getElementById('facecam').value;
+  if (!name) { toast('Write a name first', 'bad'); return; }
+  btn.disabled = true; var got = 0, tries = 0;
+  (function shot() {
+    if (got >= 15 || tries >= 40) {
+      btn.disabled = false; btn.textContent = 'Learn this face'; loadFaces();
+      toast(got ? '👑 ' + name + ': learned from ' + got + ' pictures' : 'No clear face found. Look toward the camera and try again.', got ? 'ok' : 'bad'); return;
+    }
+    tries++; btn.textContent = 'Learning ' + got + '/15...';
+    json('/faces/enroll/' + cam + '?name=' + encodeURIComponent(name), {method: 'POST'}).then(function (r) {
+      if (r.samples) got++; else if (tries % 5 === 1) toast(r.error || 'not this time');
+    }).catch(function () {}).then(function () { setTimeout(shot, 1200); });
+  })();
+});
+function reconnect(which, btn) {
+  if (btn) { btn.disabled = true; btn.dataset.t = btn.textContent; btn.textContent = '🔄 Working... (up to 30 s)'; }
+  toast((which === 'all' ? 'All cameras' : title(which)) + ': reconnecting, picture back in about 20-40 s');
+  text('/reconnect/' + which, {method: 'POST'}).then(function (t) { toast(t, 'ok'); })
+    .catch(function (e) { toast('Reconnect failed: ' + e.message, 'bad'); })
+    .then(function () { if (btn) { btn.disabled = false; btn.textContent = btn.dataset.t; } });
+}
+document.getElementById('fixall').addEventListener('click', function () { reconnect('all', this); });
+function showAutofix(s) { var b = document.getElementById('autofix'); b.classList.toggle('on', s.on); b.textContent = 'Auto-fix ' + (s.on ? 'on' : 'off'); }
+json('/autofix').then(showAutofix).catch(function () {});
+var HOME = false;
+function showHome(s) { HOME = s.home; document.querySelectorAll('#homeseg button').forEach(function (b) { b.classList.toggle('on', (b.dataset.h === '1') === s.home); }); }
+json('/home').then(showHome).catch(function () {});
+document.querySelectorAll('#homeseg button').forEach(function (b) {
+  b.addEventListener('click', function () {
+    if ((b.dataset.h === '1') === HOME) return;
+    json('/home', {method: 'POST'}).then(function (s) { showHome(s); toast(s.home ? 'Home: nothing is recorded or sent' : 'Away: recording what each camera is set to watch for', 'ok'); });
+  });
+});
+document.getElementById('autofix').addEventListener('click', function () {
+  json('/autofix', {method: 'POST'}).then(function (s) { showAutofix(s); toast('Auto-fix ' + (s.on ? 'on: a camera without picture for 90 s is reconnected by itself' : 'off'), 'ok'); });
+});
+document.querySelectorAll('[data-open]').forEach(function (b) {
+  b.addEventListener('click', function () { text('/open/' + b.dataset.open).then(function (t) { toast(t, 'ok'); }).catch(function () { toast('Could not open the folder', 'bad'); }); });
+});
+document.querySelectorAll('#layout button').forEach(function (b) {
+  b.addEventListener('click', function () {
+    document.querySelectorAll('#layout button').forEach(function (x) { x.classList.remove('on'); });
+    b.classList.add('on'); grid.classList.remove('cols1', 'cols3'); if (b.dataset.l) grid.classList.add(b.dataset.l);
+    store('layout', b.dataset.l); setTimeout(function () { document.querySelectorAll('.card').forEach(layoutZones); }, 50);
+  });
+});
+(function () { var l = store('layout'); if (l !== null) { var lb = document.querySelector('#layout button[data-l="' + l + '"]'); if (lb) lb.click(); } })();
+function fullscreen() { if (document.fullscreenElement) document.exitFullscreen(); else document.documentElement.requestFullscreen(); }
+document.getElementById('fs').addEventListener('click', fullscreen);
+var KEYDIR = {ArrowLeft: 'left', ArrowRight: 'right', ArrowUp: 'up', ArrowDown: 'down'};
+document.addEventListener('keydown', function (e) {
+  if (e.target.tagName === 'INPUT') return;
+  if (e.key === 'f' || e.key === 'F') fullscreen();
+  if (e.key === 'Escape' && focused) setFocus(null);
+  var cam = focused && CAMS.filter(function (c) { return 'card-' + c.name === focused.id && has(c, 'ptz'); })[0];
+  if (cam && KEYDIR[e.key] && !e.repeat) { e.preventDefault(); ptzStart(cam.name, KEYDIR[e.key]); }
+});
+document.addEventListener('keyup', function (e) { if (KEYDIR[e.key]) ptzStop(); });
+setInterval(function () { document.getElementById('clock').textContent = new Date().toLocaleTimeString(); }, 1000);
+function fmt(s) { return Math.floor(s / 60) + ':' + ('0' + (s % 60)).slice(-2); }
+function poll() {
+  json('/state').then(function (all) {
+    Object.keys(all).forEach(function (n) {
+      var s = all[n], card = document.getElementById('card-' + n);
+      if (!card) return;
+      var live = s.age >= 0 && s.age < 15;
+      card.classList.toggle('stale', !live);
+      card.classList.toggle('rec', !!s.recording);
+      card.recBtn.classList.toggle('on', !!s.recording);
+      card.recBtn.title = s.recording ? 'Stop recording' : 'Start recording';
+      card.querySelector('.recpill').textContent = s.recording ? '● REC ' + fmt(s.recording.for) + (s.recording.reason === 'motion' ? ' (motion)' : '') : '● REC';
+      card.classList.toggle('moving', !!(s.motion && s.motion.active));
+      if (card.meter) {
+        card.meter.firstChild.style.width = (s.motion ? Math.min(100, s.motion.level) : 0) + '%';
+        card.meter.classList.toggle('hot', !!(s.motion && s.motion.active));
+      }
+      card.querySelector('.state').textContent = live ? 'LIVE' : (s.age < 0 ? 'no picture yet' : 'no picture ' + Math.round(s.age) + ' s');
+      card.querySelector('.ov').textContent = s.age < 0 ? 'NO PICTURE' : 'NO PICTURE FOR ' + Math.round(s.age) + ' S';
+      var m = [];
+      if (s.battery !== undefined && s.battery !== null) m.push((s.charging ? '⚡ ' : '🔋 ') + s.battery + '%');
+      if (s.media) m.push(s.media);
+      card.meta.textContent = m.join('   ');
+      // Battery only for the battery camera (window, W2); the door camera always says 100 %.
+      var hasBattery = CAMS.filter(function (c) { return c.name === n && has(c, 'pir'); }).length > 0;
+      if (!hasBattery) { s.battery = null; card.meta.textContent = s.media || ''; }
+      card.querySelector('.infopill').textContent = hasBattery && s.battery !== undefined && s.battery !== null ? (s.charging ? '⚡ ' : '🔋 ') + s.battery + '%' : '';
+      if (s.ptz) showPos(n, s.ptz);
+      var fs = document.getElementById('follow-' + n); if (fs) fs.textContent = s.follow ? '● ' + s.follow : '';
+      var layer = card.querySelector('.ailayer'); layer.innerHTML = '';
+      ((s.ai && s.ai.found) || []).forEach(function (d) {
+        var b = d.box;
+        layer.appendChild(el('div', {'class': 'aibox ' + d.label + (d.name && !d.pet ? ' known' : ''), style: 'left:' + b[0] * 100 + '%;top:' + b[1] * 100 + '%;width:' + (b[2] - b[0]) * 100 + '%;height:' + (b[3] - b[1]) * 100 + '%'},
+          [el('span', {text: d.pet ? '🐾 ' + d.name + ' ' + Math.round(d.score * 100) + '%' : d.name ? '👑 ' + d.name : d.label + ' ' + Math.round(d.score * 100) + '%'})]));
+      });
+    });
+  }).catch(function () {});
+}
+setInterval(poll, 1500); poll();
+function strip(id, url, render) {
+  json(url).then(function (list) {
+    var box = document.getElementById(id + 'list'); box.innerHTML = '';
+    document.getElementById(id).hidden = false;
+    if (!list.length) box.appendChild(el('span', {'class': 'hint', text: 'Nothing yet.'}));
+    list.slice(0, 30).forEach(function (x) { box.appendChild(render(x)); });
+  }).catch(function () { document.getElementById(id).hidden = true; });
+}
+function motionEvents() {
+  strip('mv', '/events', function (e) {
+    var pic = '/saved/' + e.picture.split('/').map(encodeURIComponent).join('/');
+    return el('div', {'class': 'ev'}, [el('a', {href: pic, target: '_blank'}, [el('img', {src: pic, loading: 'lazy'})]),
+      el('div', {}, [el('b', {text: title(e.cam) + (e.label ? ' · ' + e.label : '')}), el('span', {text: ' · ' + new Date(e.time * 1000).toLocaleString()}),
+        e.clip ? el('a', {href: '/saved/' + e.clip.split('/').map(encodeURIComponent).join('/'), target: '_blank', text: ' · clip'}) : null])]);
+  });
+}
+function frigateEvents() {
+  strip('ev', '/frigate/api/events?limit=20', function (e) {
+    var base = '/frigate/api/events/' + e.id, score = e.data && e.data.top_score ? Math.round(e.data.top_score * 100) + '%' : '';
+    return el('div', {'class': 'ev'}, [el('a', {href: base + '/snapshot.jpg', target: '_blank'}, [el('img', {src: base + '/thumbnail.jpg', loading: 'lazy'})]),
+      el('div', {}, [el('b', {text: e.label + ' ' + score}), el('br'), el('span', {text: e.camera + ' · ' + new Date(e.start_time * 1000).toLocaleString()}),
+        e.has_clip ? el('a', {href: base + '/clip.mp4', target: '_blank', text: ' · clip'}) : null])]);
+  });
+}
+setInterval(motionEvents, 10000); motionEvents(); setInterval(frigateEvents, 30000); frigateEvents();
+</script></html>

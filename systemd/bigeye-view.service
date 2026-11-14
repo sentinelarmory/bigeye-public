@@ -1,0 +1,16 @@
+# Main machine: the page on http://localhost:8770 (systemctl --user enable --now bigeye-view)
+[Unit]
+Description=Sentinel-BigEye page
+After=network-online.target
+
+[Service]
+WorkingDirectory=%h/bigeye/viewer
+# One name=url per camera; --control name=bridge-url[,listen][,pir][,ptz] gives it its buttons.
+ExecStart=/usr/bin/python3 %h/bigeye/viewer/bigeye-view.py --port 8770 \
+  --control door=http://127.0.0.1:18765,listen --control cam360=http://127.0.0.1:18767,ptz \
+  door=rtsp://127.0.0.1:18554/cam cam360=http://127.0.0.1:18767/cam360.h265
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target
