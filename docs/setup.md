@@ -38,7 +38,9 @@ every few minutes.
 ## 4. Bridges (camera machine)
 
 - 360: set `CAM360_MAC` and `CAMERA_IFACE` in `systemd/bigeye-bridge-cam360.service`, start it.
-- door / window: see [bridges/iwfcam/README.md](../bridges/iwfcam/README.md).
+- door / window: build `bridges/doorbridge` (`go build`), fill in `systemd/bigeye-bridge-door.service` (camera address and
+  its 12-character LAN token) and start it. **Check:** `curl http://127.0.0.1:8765/status` shows `"frame_seen": true`.
+  After a factory reset the camera has a new LAN token; see [bridges/doorbridge/README.md](../bridges/doorbridge/README.md).
 
 **Check:** `curl http://127.0.0.1:8767/status` says `"state": "streaming"`.
 

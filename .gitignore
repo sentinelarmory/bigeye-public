@@ -8,3 +8,5 @@ __pycache__/
 bigeye.toml
 faces.json
 iwfcloud-learned.json
+bridges/doorbridge/bigeye-doorbridge
+bridges/doorbridge/bigeye-doorbridge-linux-amd64

@@ -1,0 +1,14 @@
+github.com/bluenviron/gortsplib/v4 v4.9.0 h1:Zm/XuKDBQrU0Hcm4wqBhGX0U3hUAVh0Wm7cvJpbJWyU=
+github.com/bluenviron/gortsplib/v4 v4.9.0/go.mod h1:0XtUPbNFHNpMz4Sa70PmSelvclWTTJujHfSKkhuLpxg=
+github.com/bluenviron/mediacommon v1.10.0 h1:ffIWaS+1vYpPLV6QOt4VEvIlb/OKtodzagzsY6EDOnw=
+github.com/bluenviron/mediacommon v1.10.0/go.mod h1:HDyW2CzjvhYJXtdxstdFPio3G0qSocPhqkhUt/qffec=
+github.com/google/uuid v1.6.0 h1:NIvaJDMOsjHA8n1jAhLSgzrAzy1Hgr+hNrb57e+94F0=
+github.com/google/uuid v1.6.0/go.mod h1:TIyPZe4MgqvfeYDBFedMoGGpEw/LqOeaOT+nhxU+yHo=
+github.com/pion/randutil v0.1.0 h1:CFG1UdESneORglEsnimhUjf33Rwjubwj6xfiOXBa3mA=
+github.com/pion/randutil v0.1.0/go.mod h1:XcJrSMMbbMRhASFVOlj/5hQial/Y8oH/HVo7TBZq+j8=
+github.com/pion/rtcp v1.2.14 h1:KCkGV3vJ+4DAJmvP0vaQShsb0xkRfWkO540Gy102KyE=
+github.com/pion/rtcp v1.2.14/go.mod h1:sn6qjxvnwyAkkPzPULIbVqSKI5Dv54Rv7VG0kNxh9L4=
+github.com/pion/rtp v1.8.7-0.20240429002300-bc5124c9d0d0 h1:yPAphilskTN7U3URvBVxlVr0PzheMeWqo7PaOqh//Hg=
+github.com/pion/rtp v1.8.7-0.20240429002300-bc5124c9d0d0/go.mod h1:pBGHaFt/yW7bf1jjWAoUjpSNoDnw98KTMg+jWWvziqU=
+github.com/pion/sdp/v3 v3.0.9 h1:pX++dCHoHUwq43kuwf3PyJfHlwIj4hXA7Vrifiq0IJY=
+github.com/pion/sdp/v3 v3.0.9/go.mod h1:B5xmvENq5IXJimIO4zfp6LAe1fD9N+kFv+V/1lOdz8M=

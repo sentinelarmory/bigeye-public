@@ -1,0 +1,15 @@
+# Camera machine: bridge for the door camera (H.264 -> RTSP :8554, controls on :8765)
+# Fill in the camera's address and its 12-character LAN token (read from its register packet, see bridges/doorbridge/README.md).
+# Copy to bigeye-bridge-window.service for a W2 camera, with other ports (e.g. -rtsp-port 8555 -http :8766 -local-port 36892).
+[Unit]
+Description=Sentinel-BigEye bridge for the door camera (LAN only)
+After=network-online.target
+
+[Service]
+ExecStart=%h/bigeye/bridges/doorbridge/bigeye-doorbridge -ip 10.42.0.10 -password-hash CHANGE_ME_12 -cloud "" \
+  -local-port 36891 -rtsp-port 8554 -http :8765 -media-timeout 20
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target

@@ -140,7 +140,14 @@ camera_part() {
   echo "   Edit the placeholder MAC addresses in $APP/camera-machine/bigeye-firewall.nft, then:"
   echo "     sudo $APP/camera-machine/bigeye-firewall.sh"
   echo "   Check: a camera can no longer reach the internet, and the call-home tab starts counting."
-  warn "door/window cameras: the new bridge is being finished (bridges/iwfcam/README.md)"
+  say "Door / window bridge"
+  if need go; then
+    run bash -c "cd '$APP/bridges/doorbridge' && go build -trimpath -ldflags='-s -w' -o bigeye-doorbridge ."
+    install_unit bigeye-bridge-door.service
+    warn "fill in the camera address and LAN token in $UNITS/bigeye-bridge-door.service, then: systemctl --user enable --now bigeye-bridge-door"
+  else
+    warn "Go is missing: install Go 1.23+ to build the door/window bridge (bridges/doorbridge/README.md)"
+  fi
 }
 
 [ "$DRY" = 1 ] && echo "Dry run: nothing will be changed."

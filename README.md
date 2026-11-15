@@ -91,8 +91,8 @@ The camera machine and the main machine can be the same box. Details: [docs/arch
 | Camera | Protocol | Status |
 |---|---|---|
 | **Tested:** 360 pan/tilt camera ZAS-Q01 | CS2 PPCS P2P over UDP | ✅ video (H.265), PTZ with absolute positions, night, quality, tracking, call-home stand-in |
-| **Tested:** door camera JT-B9 type | `1TEG`/`2TEG` LAN protocol, H.264 | 🔧 new bridge written from our own protocol notes, in testing ([why](bridges/iwfcam/README.md)) |
-| **Tested:** W2 battery camera | `1TEG`/`2TEG` LAN protocol, MJPEG 640x480 | 🔧 same new bridge: first live test passed (13 fps, battery read-out) |
+| **Tested:** door camera JT-B9 type | `1TEG`/`2TEG` LAN protocol, H.264 | ✅ video (1080p) with key-frame replay for late viewers, controls, battery; our own clean-room bridge ([bridges/doorbridge](bridges/doorbridge/), [how it was written](bridges/doorbridge/PROVENANCE.md)) |
+| **Tested:** W2 battery camera | `1TEG`/`2TEG` LAN protocol, MJPEG 640x480 | ✅ same bridge: MJPEG, controls, battery and sleep settings |
 | **Likely similar** | other cameras whose UID looks like `ABCD-123456-EFGHI` and that answer CS2 P2P on UDP 32100, or cameras that answer `1TEG` discovery on UDP 10104 | ❓ worth a try; please report |
 | **Unknown** | Tuya / Smart Life, Hikvision/EZVIZ, Reolink, TP-Link Tapo and other families | ⚪ different protocols, not supported (many of these have their own RTSP option) |
 
@@ -104,9 +104,9 @@ The vendors' "4K" labels did not hold on the tested units: the real streams top 
 |---|---|
 | ✅ **Works** | live view, recording, motion + AI with zones and masks, faces, 360 control and follow, stand-in clouds, call-home monitor, reports, narrator and search, automation, guard, MCP server, tests for the camera-free parts |
 | 🟡 **New** | the Android app (pairing, page and alert long-poll tested; first real-phone run in progress) |
-| 🔧 **In progress** | a new door/window bridge written from our own protocol notes |
+| 🔧 **In progress** | the new door/window bridge running day-to-day in the reference home (tested live on both cameras) |
 | ⚪ **Limits** | the stand-ins need one relay run (door/window) or the camera's ID (360) to answer; the 360 must be paired once with the vendor app; after a factory reset a door/window camera gets a new LAN token (see the bridge notes) |
-| 🔜 **Next** | the new door/window bridge in this repo, Home Assistant events |
+| 🔜 **Next** | Home Assistant events |
 
 ## License and credits
 
