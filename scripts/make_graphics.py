@@ -95,7 +95,7 @@ png("banner", frame(1280, 460, f'''{eye(1040, 225, 140)}
 <text x="68" y="214" font-family="Lato" font-weight="900" font-size="80" letter-spacing="9" fill="{IVORY}">SENTINEL</text>
 <text x="70" y="286" font-family="Lato" font-weight="300" font-size="54" letter-spacing="16" fill="url(#gold)">BIGEYE</text>
 <text x="72" y="344" font-family="Lato" font-weight="400" font-size="26" fill="{IVORY}">Three cheap cameras. No cloud. Eyes that think on your own machine.</text>
-<text x="72" y="424" font-family="Lato" font-weight="700" font-size="14.5" letter-spacing="2.4" fill="{MUTED}">CAM360 · DOOR · WINDOW · LOCAL AI · FACES · FOLLOW · CALL-HOME MONITOR</text>''', cyan=True), 1280, 460)
+<text x="72" y="424" font-family="Lato" font-weight="700" font-size="14.5" letter-spacing="2.4" fill="{MUTED}">CAM360 · DOOR · WINDOW · LOCAL AI · NARRATOR · GUARD · PHONE APP · CALL-HOME MONITOR</text>''', cyan=True), 1280, 460)
 
 # ---- section headings ----------------------------------------------------------------
 HEADS = [("problem", "THE PROBLEM"), ("built", "WHAT WAS BUILT"), ("see", "SEE IT"), ("numbers", "THE NUMBERS"),
@@ -130,7 +130,7 @@ hours = max(0.1, (int(DATA["captured_at"][11:13]) * 60 + int(DATA["captured_at"]
 local_hours = hours + 1  # captured_at is UTC; the day is counted from local midnight (CET)
 tiles("numbers", [
     (num(total), "attempts to call home", f"{DAY}, 00:00 to {int(local_hours):02d}:{int(local_hours % 1 * 60):02d}", GOLD),
-    (num(round(total / local_hours)), "per hour", "about one every 2.5 seconds", GOLD),
+    (num(round(total / local_hours)), "per hour", f"about one every {3600 * local_hours / max(1, total):.1f} seconds", GOLD),
     (f"{round(100 * cams.get('cam360', 0) / max(1, total))} %", "from the 360 camera", f"{num(cams.get('cam360', 0))} attempts", IVORY),
     (str(DATA["picture_uploads"]), "pictures it tried to send", f"{DATA['picture_upload_bytes'] // 1024:,} KB of your home", WARN),
     ("0", "left the house", "everything stayed home", CYAN),
@@ -184,7 +184,7 @@ def box(x, y, w, h, title, lines, c=GOLD):
     return s + "</g>"
 
 
-g = box(24, 40, 300, 230, "THE CAMERAS", ["three cheap Wi-Fi cameras", "360: iCam365 / Tange (CS2 P2P)", "door: iWFCam, H.264", "window: iWFCam W2, MJPEG",
+g = box(24, 40, 300, 230, "THE CAMERAS", ["three cheap Wi-Fi cameras", "360: ZAS-Q01 (CS2 P2P)", "door: JT-B9, H.264", "window: W2, MJPEG",
                                           "each one wants to call home", "every few seconds"], WARN)
 g += box(390, 24, 470, 262, "CAMERA MACHINE", ["isolated Wi-Fi, no way out", "local bridges: video + every control", "stand-in clouds answer \"OK\"",
                                                      "and keep what they get", "firewall redirects DNS + cloud ports", "reverse tunnel to the main PC"])
@@ -201,7 +201,9 @@ png("architecture", frame(1280, 384, g, halo=False), 1280, 384)
 FEATS = [("LIVE VIEW", "all cameras on one page", "buttons never queue behind video"), ("RECORD", "snapshots + MP4 on this PC", "3 s before a motion alarm"),
          ("AI ON THE GPU", "person · cat · dog", "about 5 ms per picture"), ("FACES + PETS", "\"Alex\" and Whiskers", "known faces are not recorded"),
          ("360 CONTROL", "any spot as a favourite", "night mode, quality, follow"), ("DOOR + WINDOW", "every control the bridge knows", "real night-vision read-back"),
-         ("SELF-HEALING", "auto-fix after 90 s", "key-frame replay for the door"), ("CALL-HOME", "live monitor of every attempt", "printable reports")]
+         ("SELF-HEALING", "auto-fix after 90 s", "key-frame replay for the door"), ("CALL-HOME", "live monitor of every attempt", "printable reports"),
+         ("NARRATOR", "every event described locally", "search by meaning, story of the day"), ("GUARD", "usage meter on the page", "acts when the GPU or CPU struggles"),
+         ("PHONE APP", "the same page on Android", "alerts only when they need you"), ("MCP", "agents can look and ask", "read-only unless told otherwise")]
 cw, ch = 296, 140
 g = ""
 for i, (t, a, b) in enumerate(FEATS):
@@ -211,5 +213,6 @@ for i, (t, a, b) in enumerate(FEATS):
 <rect width="4" height="{ch}" rx="2" fill="{c}"/><text x="24" y="44" font-family="Lato" font-weight="900" font-size="20" letter-spacing="2" fill="{c}">{t}</text>
 <text x="24" y="80" font-family="Lato" font-weight="700" font-size="17" fill="{IVORY}">{esc(a)}</text>
 <text x="24" y="106" font-family="Lato" font-weight="400" font-size="15" fill="{MUTED}">{esc(b)}</text></g>'''
-png("built", frame(1280, 24 * 2 + ch * 2 + 16, g, halo=False), 1280, 24 * 2 + ch * 2 + 16)
+rows = (len(FEATS) + 3) // 4
+png("built", frame(1280, 24 * 2 + ch * rows + 16 * (rows - 1), g, halo=False), 1280, 24 * 2 + ch * rows + 16 * (rows - 1))
 print("all graphics made from", sorted((REPO / "data").glob("call-home-*.json"))[-1].name)

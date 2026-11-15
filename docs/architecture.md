@@ -12,8 +12,8 @@
 | Camera | Camera → the camera machine | the camera machine → main machine | Page reader |
 |---|---|---|---|
 | Cam360 | CS2 PPCS (cam360-bridge.py) | raw H.265 `127.0.0.1:18767/cam360.h265` | ffmpeg (`-f hevc`, wall-clock timestamps) → JPEG |
-| Door | iWFCam LAN-only (iwfcam-lan) | RTSP `127.0.0.1:18554/cam` | ffmpeg → JPEG (full-range conversion) |
-| Window | iWFCam LAN-only, MJPEG | `127.0.0.1:18766/cam.mjpg` | pass-through (camera's own JPEGs) |
+| Door | LAN-only bridge (iwfcam-lan) | RTSP `127.0.0.1:18554/cam` | ffmpeg → JPEG (full-range conversion) |
+| Window | LAN-only bridge, MJPEG | `127.0.0.1:18766/cam.mjpg` | pass-through (camera's own JPEGs) |
 
 Controls: `127.0.0.1:18765` (door), `:18766` (window), `:18767` (360), proxied by the page
 under `/ctl/<cam>/…` with an allow-list.

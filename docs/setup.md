@@ -28,7 +28,7 @@ To let only your phone out (the cameras stay locked in): `sudo bash camera-machi
 ## 3. Stand-in clouds (camera machine)
 
 - 360 camera: set `BIGEYE_360_UUID` (the ID on the camera label) in `systemd/bigeye-fakecloud.service`, install and start it.
-- iWFCam cameras: start `bigeye-iwfcloud.service`, then let it learn the real cloud's answers once: write
+- Door/window cameras: start `bigeye-iwfcloud.service`, then let it learn the real cloud's answers once: write
   `<camera UID> <unix time until>` into `~/.config/sentinel-bigeye/iwfcloud-relay` for a few minutes during pairing mode.
   The answers are saved in `~/.config/sentinel-bigeye/iwfcloud-learned.json` and used from then on.
 

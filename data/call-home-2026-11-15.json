@@ -35,7 +35,7 @@
         "door": 2800,
         "window": 100
       },
-      "what_it_does": "The door or window camera calls its own cloud (iWFCam) to say where it is."
+      "what_it_does": "The door or window camera calls its maker's cloud to say where it is."
     },
     {
       "kind": "Picture upload",

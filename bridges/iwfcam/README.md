@@ -1,4 +1,4 @@
-# iWFCam bridge (door / window cameras): being rewritten
+# Door / window bridge: being rewritten
 
 The bridge used during development was built on an existing open project that has **no licence**, so it cannot be
 shared here. A new bridge is being written from scratch for this repo, from our own protocol notes

@@ -1,6 +1,6 @@
 # Camera protocols (as decoded and verified)
 
-## Cam360 — iCam365 / Tange ZAS-Q01, CS2 PPCS over UDP (LAN only)
+## Cam360 — ZAS-Q01, CS2 PPCS over UDP (LAN only)
 
 Session: `F1 30` LanSearch to UDP 32108 → camera answers `PUNCH_PKT 0x41` (20-byte body)
 from a rotating port → echo it as `0x41`, then `0x42 P2P_RDY` → DRW `0xD0` packets
@@ -30,7 +30,7 @@ Video: DRW channel 2, byte stream of frames with a 16-byte header
 `<u16 codec (80 = H.265)><u16 flags (1 = key)><u32 ?><u32 length><u32 ms>` + Annex-B.
 Audio: channel 1, A-law.
 
-## Door / window — iWFCam (`2TEG` control packets, LAN-only `1TEG` hello)
+## Door / window — JT-B9 and W2 (`2TEG` control packets, LAN-only `1TEG` hello)
 
 Control packet: `"2TEG" <u16 1> <u16 len> <u32 session> <u32 cmd> <u32 subcmd> <u32 datalen> <u32 0> <payload>`.
 

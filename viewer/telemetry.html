@@ -68,7 +68,7 @@ table{border-collapse:collapse;font-size:12px;width:100%}td,th{padding:3px 6px;b
   <li><b>Register with peer-to-peer servers.</b> UDP 32100 to servers in China (119.23.250.91, 47.107.255.39, 120.79.14.221) and abroad, plus relay ports 10000/10126 that carry live video out of the house.</li>
   <li><b>Report what it sees and upload pictures.</b> Its own AI tags "body" (person) or "motion", sends <code>/record/report</code>, asks <code>/record/token</code> for real Alibaba OSS storage keys, then uploads the picture over HTTPS.</li>
   <li><b>Report viewing and ask for remote control.</b> <code>/stats/device/streaming-record</code> when someone watches, and <code>/ota/getlogconfig</code> for remote logging and firmware updates.</li>
-  <li><b>Door and window cameras (iWFCam)</b> do the same on UDP 10101–10103: they look themselves up and say where they are, so the app (and the vendor) can reach them.</li>
+  <li><b>Door and window cameras</b> do the same on UDP 10101–10103: they look themselves up and say where they are, so the app (and the vendor) can reach them.</li>
 </ol>
 <p class="note">Here every step lands on the camera machine: the camera Wi-Fi has no way out, DNS and the cloud ports are redirected to stand-ins that answer "OK" and keep what they get. Counts are exact even where a log writes only every 100th packet.</p></div>
 </main>

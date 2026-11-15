@@ -6,8 +6,8 @@ writes only every 100th packet: lines that carry a running number "(#N)" add the
 difference to the previous number.
 
 Sources on the camera machine:
-  ~/bigeye-fakecloud.log                 360 camera (Tange / iCam365 cloud stand-in)
-  ~/.cache/bigeye-iwfcloud.log           door and window cameras (iWFCam cloud stand-in)
+  ~/bigeye-fakecloud.log                 360 camera (cloud stand-in)
+  ~/.cache/bigeye-iwfcloud.log           door and window cameras (cloud stand-in)
   ~/bigeye-360-media/reports.jsonl       the 360 camera's own motion / person reports
 """
 import collections
@@ -18,11 +18,11 @@ import subprocess
 import threading
 import time
 
-# The three logs, in this order: 360 stand-in cloud, iWFCam stand-in cloud, the 360's own reports.
+# The three logs, in this order: 360 stand-in cloud, door/window stand-in cloud, the 360's own reports.
 KINDS = ("fake", "iwf", "report")
 CAMERA_BY_IP = {}  # set by Telemetry(): camera Wi-Fi address -> camera name
-CAMERA_NAMES = {"cam360": "Cam360 (iCam365 / Tange 360)", "door": "Door (iWFCam)", "window": "Window (iWFCam W2)",
-                "door/window": "Door or window (iWFCam)"}
+CAMERA_NAMES = {"cam360": "Cam360", "door": "Door", "window": "Window (W2)",
+                "door/window": "Door or window"}
 
 # category -> (label, what the camera is trying to do)
 CATEGORIES = {
@@ -38,7 +38,7 @@ CATEGORIES = {
     "relay": ("Video relay", "Tries the relay servers that carry live video out of the house."),
     "dns": ("Looks up a server", "Asks for the address of one of its cloud servers."),
     "time": ("Time and region", "Asks the cloud for the time, time zone and which server region to use."),
-    "iwf": ("Door/window cloud", "The door or window camera calls its own cloud (iWFCam) to say where it is."),
+    "iwf": ("Door/window cloud", "The door or window camera calls its maker's cloud to say where it is."),
     "other": ("Other", "Other contact."),
 }
 
@@ -230,7 +230,7 @@ METHOD_STEPS = [
     ("Register with peer-to-peer servers", "UDP 32100 to servers in China (119.23.250.91, 47.107.255.39, 120.79.14.221) and abroad, plus relay ports 10000/10126 that carry live video out of the house."),
     ("Report what it sees and upload pictures", "The camera's own AI tags 'body' (person) or 'motion', sends /record/report, asks /record/token for real Alibaba OSS storage keys and uploads the picture over HTTPS."),
     ("Report viewing and ask for remote control", "/stats/device/streaming-record when someone watches; /ota/getlogconfig for remote logging and firmware updates."),
-    ("Door and window cameras (iWFCam)", "Do the same on UDP 10101-10103: they look themselves up and report where they are, so the app (and the vendor) can reach them."),
+    ("Door and window cameras", "Do the same on UDP 10101-10103: they look themselves up and report where they are, so the app (and the vendor) can reach them."),
 ]
 
 

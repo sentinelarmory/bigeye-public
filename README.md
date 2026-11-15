@@ -24,7 +24,7 @@ the cameras make to reach their vendor.
 | 🔍 **What it found** | [How they phone home](docs/how-they-phone-home.md): three cameras, 33,000+ attempts in one day |
 | 🗺️ **Status** | [Honest status](#honest-status) |
 
-> **Not affiliated with Tange, iCam365, iWFCam, Temu or Alibaba.** All trademarks belong to their owners. No vendor
+> **Not affiliated with any camera maker, app or shop.** All trademarks belong to their owners. No vendor
 > software, firmware or keys are included. BigEye talks to cameras you own over your own network.
 > Use at your own risk.
 
@@ -89,9 +89,9 @@ The camera machine and the main machine can be the same box. Details: [docs/arch
 
 | Camera | Status |
 |---|---|
-| 360 pan/tilt, iCam365 / Tange app (tested: ZAS-Q01) | ✅ video, PTZ, night, quality, tracking, call-home stand-in |
-| iWFCam door camera, H.264 (tested: JT-B9 type) | 🔧 bridge being rewritten for this repo ([why](bridges/iwfcam/README.md)) |
-| iWFCam W2 battery camera, MJPEG | 🔧 same bridge |
+| 360 pan/tilt camera (tested: ZAS-Q01) | ✅ video, PTZ, night, quality, tracking, call-home stand-in |
+| Door camera, H.264 (tested: JT-B9 type) | 🔧 bridge being rewritten for this repo ([why](bridges/iwfcam/README.md)) |
+| W2 battery camera, MJPEG | 🔧 same bridge |
 
 The vendors' "4K" labels did not hold on the tested units: the real streams top out at 1920x1080.
 
@@ -101,8 +101,8 @@ The vendors' "4K" labels did not hold on the tested units: the real streams top 
 |---|---|
 | ✅ **Works** | live view, recording, motion + AI with zones and masks, faces, 360 control and follow, stand-in clouds, call-home monitor, reports, narrator and search, automation, guard, MCP server, tests for the camera-free parts |
 | 🟡 **New** | the Android app (pairing, page and alert long-poll tested; first real-phone run in progress) |
-| 🔧 **In progress** | a new iWFCam (door/window) bridge written from our own protocol notes |
-| ⚪ **Limits** | the stand-ins need one relay run (iWFCam) or the camera's ID (360) to answer; the 360 must be paired once with the vendor app; after a factory reset an iWFCam camera gets a new LAN token (see the bridge notes) |
+| 🔧 **In progress** | a new door/window bridge written from our own protocol notes |
+| ⚪ **Limits** | the stand-ins need one relay run (door/window) or the camera's ID (360) to answer; the 360 must be paired once with the vendor app; after a factory reset a door/window camera gets a new LAN token (see the bridge notes) |
 | 🔜 **Next** | one-command installer, Home Assistant events |
 
 ## License and credits
