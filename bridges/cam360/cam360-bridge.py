@@ -310,6 +310,19 @@ class Handler(BaseHTTPRequestHandler):
                 return self.reply(400, {"error": "p must be hex"})
             queue(int(q["t"]), payload)
             return self.reply(200, {"queued": f"raw {q['t']} {payload.hex()}"})
+        if url.path == "/calibrate":  # the app's "pan-tilt calibration" (capture 2026-11-13): 0x1001 <u32 0x23><u32 0>
+            queue(PTZ_MOVE, struct.pack("<II", 0x23, 0))
+            return self.reply(200, {"queued": "pan-tilt calibration"})
+        if url.path == "/pos":  # where the camera really points (0x40A -> reply 0x40B: <f32 x><f32 y>...)
+            asked = time.time()
+            queue(0x40A, b"")
+            for _ in range(30):
+                time.sleep(0.1)
+                r = REPLIES.get(0x40B)
+                if r and r["t"] >= round(asked, 1) - 0.1:
+                    x, y = struct.unpack("<ff", bytes.fromhex(r["hex"])[:8])
+                    return self.reply(200, {"x": round(x, 4), "y": round(y, 4)})
+            return self.reply(504, {"error": "camera did not report its position"})
         if url.path == "/replies":
             return self.reply(200, {str(k): v for k, v in sorted(REPLIES.items())})
         if url.path == "/night" and q.get("mode") in ("on", "off", "auto"):

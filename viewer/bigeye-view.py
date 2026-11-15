@@ -38,12 +38,17 @@ PREROLL_SECONDS = 4  # pictures kept in memory so a motion recording can start b
 class Camera:
     def __init__(self, name, url, fps, quality, flip=False):
         self.name, self.url, self.fps, self.quality, self.flip = name, url, fps, quality, flip
+        self.process = False  # set before the reader starts: send an MJPEG camera through ffmpeg too (clock, picture help)
         self.frame = None
         self.stamp = 0.0
         self.recent = collections.deque()  # (stamp, jpeg) for the last PREROLL_SECONDS
         self.cond = threading.Condition()
         self.proc = None
         self.eq = None  # (brightness -100..100, contrast -100..100) done here, for cameras without their own
+        self.enhance = {}  # "deflicker": bool, "denoise": bool, "night_boost": 0..2 (BigEye picture help)
+        self.privacy = []  # [[x0, y0, x1, y1], ...] as 0..1: blacked out in the live picture, recordings and AI
+        self.count = 0     # pictures received (for frame rate)
+        self.osd = False   # draw our own date/time stamp (the door camera lost its own)
         threading.Thread(target=self._run, daemon=True).start()
 
     def restart_reader(self):
@@ -55,6 +60,7 @@ class Camera:
         now = time.time()
         with self.cond:
             self.frame, self.stamp = frame, now
+            self.count += 1
             self.recent.append((now, frame))
             while self.recent and self.recent[0][0] < now - PREROLL_SECONDS:
                 self.recent.popleft()
@@ -89,14 +95,20 @@ class Camera:
                 pass
             time.sleep(2)
 
+    def passthrough(self):
+        return self.url.startswith("http") and not self.flip and not self.url.endswith(".h265") and not self.process
+
     def _run(self):
-        if self.url.startswith("http") and not self.flip and not self.url.endswith(".h265"):
+        time.sleep(0.2)  # let main() set .process first
+        if self.passthrough():
             return self._run_passthrough()
         cmd = ["ffmpeg", "-hide_banner", "-loglevel", "error"]
         if self.url.startswith("rtsp"):
             cmd += ["-rtsp_transport", "tcp"]
         if self.url.endswith(".h265"):  # raw H.265 from the 360 bridge: no container, no timestamps
             cmd += ["-use_wallclock_as_timestamps", "1", "-f", "hevc"]
+        elif self.url.startswith("http"):  # MJPEG over HTTP (window camera): no timestamps either
+            cmd += ["-use_wallclock_as_timestamps", "1"]
         cmd += ["-fflags", "nobuffer", "-flags", "low_delay", "-i", self.url, "-an", "-q:v", str(self.quality)]
         # Every frame the camera sends, at its own rate (--fps 0), or capped at --fps.
         cmd += ["-fps_mode", "vfr"] if not self.fps else ["-r", str(self.fps)]
@@ -107,7 +119,32 @@ class Camera:
             filters.append("scale=out_range=pc,format=yuvj420p")
             if self.eq and any(self.eq):
                 filters.append(f"eq=brightness={self.eq[0] / 200:.3f}:contrast={1 + self.eq[1] / 100:.3f}")
-            full = cmd + (["-vf", ",".join(filters)] if filters else []) + ["-f", "mjpeg", "pipe:1"]
+            polys = []
+            for z in self.privacy or []:
+                if isinstance(z, dict) and z.get("poly"):
+                    polys.append(z["poly"])
+                    continue
+                x0, y0, x1, y1 = (max(0.0, min(1.0, float(v))) for v in z)
+                filters.append(f"drawbox=x=iw*{min(x0, x1):.4f}:y=ih*{min(y0, y1):.4f}:w=iw*{abs(x1 - x0):.4f}:h=ih*{abs(y1 - y0):.4f}:color=black@1:t=fill")
+            e = self.enhance or {}
+            if e.get("deflicker"):  # smooths the brightness pulsing of lamps on mains power (50 Hz)
+                filters.append("deflicker=mode=pm:size=5")
+            if e.get("denoise"):
+                filters.append("hqdn3d=3:2:6:4")
+            if e.get("night_boost"):  # lift dark areas without touching the camera's night vision
+                filters.append(["", "eq=gamma=1.35:brightness=0.03:saturation=1.1", "eq=gamma=1.7:brightness=0.06:saturation=1.15"][int(e["night_boost"])])
+            post = []
+            if self.osd:
+                post.append("drawtext=fontfile=" + OSD_FONT + ":text='%{localtime\\:%Y-%m-%d %H\\\\\\:%M\\\\\\:%S}  "
+                            + self.name.capitalize() + "':x=16:y=16:fontsize=h/32:fontcolor=white:borderw=2:bordercolor=black@0.8")
+            if polys:  # free-hand privacy masks: a picture with black shapes laid over the video
+                mask = privacy_mask_png(self.name, polys)
+                graph = (",".join(filters) + "[pre];" if filters else "[in]null[pre];") + \
+                    f"movie={mask}[m];[m][pre]scale2ref[ms][v];[v][ms]overlay" + ("," + ",".join(post) if post else "")
+                full = cmd + ["-vf", graph, "-f", "mjpeg", "pipe:1"]
+            else:
+                chain = filters + post
+                full = cmd + (["-vf", ",".join(chain)] if chain else []) + ["-f", "mjpeg", "pipe:1"]
             proc = subprocess.Popen(full, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             self.proc = proc
             threading.Thread(target=self._watch, args=(proc,), daemon=True).start()
@@ -151,6 +188,37 @@ class Camera:
 
 
 CAMS = {}
+OSD_FONT = next((f for f in ("/usr/share/fonts/truetype/dejavu/DejaVuSansMono-Bold.ttf", "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf")
+                 if os.path.exists(f)), "")
+
+
+def clean_shape(z):
+    """A zone or mask: [x0, y0, x1, y1] or {"poly": [[x, y], ...]} (free-hand), all 0..1."""
+    if isinstance(z, list) and len(z) == 4 and all(isinstance(v, (int, float)) for v in z):
+        return [round(min(1, max(0, float(v))), 4) for v in z]
+    if isinstance(z, dict) and isinstance(z.get("poly"), list):
+        pts = [[round(min(1, max(0, float(p[0]))), 4), round(min(1, max(0, float(p[1]))), 4)]
+               for p in z["poly"][:300] if isinstance(p, list) and len(p) == 2 and all(isinstance(v, (int, float)) for v in p)]
+        return {"poly": pts} if len(pts) >= 3 else None
+    return None
+
+
+def privacy_mask_png(name, polys):
+    """Black free-hand shapes on a transparent 1920x1080 picture, for ffmpeg to lay over the video."""
+    from PIL import Image, ImageDraw
+    folder = os.path.join(os.path.expanduser("~/.config/sentinel-bigeye"), "masks")
+    os.makedirs(folder, exist_ok=True)
+    path = os.path.join(folder, f"{name}.png")
+    im = Image.new("RGBA", (1920, 1080), (0, 0, 0, 0))
+    d = ImageDraw.Draw(im)
+    for poly in polys:
+        pts = [(max(0, min(1, float(x))) * 1919, max(0, min(1, float(y))) * 1079) for x, y in poly]
+        if len(pts) >= 3:
+            d.polygon(pts, fill=(0, 0, 0, 255))
+    im.save(path)
+    return path
+
+
 LOG_FILE = cfg_path("paths", "log_file")
 
 
@@ -182,7 +250,7 @@ CONTROLS = {}  # camera name -> base URL of its bridge (camera-side controls)
 FEATURES = {}  # camera name -> set of extra features: "listen", "pir", "ptz"
 ALLOWED_CONTROL_PATHS = ("ir", "control/picture", "control/light", "control/audio", "pir", "status", "reboot",
                          "night", "tracking", "quality", "control/time", "control/resolution", "control/keyframe",
-                         "control/sleepflags")
+                         "control/sleepflags", "calibrate")
 POST_ONLY_PATHS = ("reboot", "control/time", "control/keyframe", "control/sleepflags")
 MEDIA_ASKED = {}  # camera name -> last time the bridge was asked what the camera streams
 FRIGATE = None  # base URL of Frigate's API (events, thumbnails, clips), e.g. http://127.0.0.1:15000
@@ -356,7 +424,151 @@ def start_recording(name, reason, preroll=0, max_seconds=MANUAL_MAX_SECONDS, sto
 # ---------------------------------------------------------------- 360 camera (absolute positions)
 
 PTZ_QUIET = {}  # camera name -> time until which the motion sensor ignores the picture (camera turning)
+MANUAL_UNTIL = {}  # camera name -> until when the owner is steering by hand (BigEye follow keeps still)
+MANUAL_PAUSE = 90
 PTZ_STEP = {"pan": 0.025, "tilt": 0.04}
+
+
+# ---- favourites that fix themselves: a reference picture per favourite --------------------
+REF_DIR = os.path.join(os.path.dirname(SETTINGS_FILE), "presets")
+AUTOFIX_STATE = {}  # camera -> {"running": bool, "last": report, "restart_seen": time}
+
+
+def _grey(jpeg, w=480, h=270):
+    import numpy as np
+    from PIL import Image
+    img = Image.open(io.BytesIO(jpeg)); img.draft("L", (w, h))
+    a = np.asarray(img.convert("L").resize((w, h)), np.float32)
+    a[: h // 9, int(w * 0.6):] = a.mean()  # the camera's clock changes every second
+    return a - a.mean()
+
+
+def _shift(a, b):
+    """How far the picture content moved from a (reference) to b (now): share of width/height, and how sure."""
+    import numpy as np
+    f = np.fft.fft2(a) * np.conj(np.fft.fft2(b))
+    r = np.fft.ifft2(f / (np.abs(f) + 1e-6)).real
+    y, x = np.unravel_index(r.argmax(), r.shape)
+    sure = float(r.max() / (r.std() + 1e-9))
+    if y > r.shape[0] // 2:
+        y -= r.shape[0]
+    if x > r.shape[1] // 2:
+        x -= r.shape[1]
+    return -x / r.shape[1], -y / r.shape[0], sure
+
+
+def ref_path(name, preset):
+    safe = re.sub(r"[^A-Za-z0-9_.-]", "_", preset)
+    return os.path.join(REF_DIR, name, safe + ".jpg")
+
+
+def save_reference(name, preset):
+    frame = CAMS[name].frame
+    if frame:
+        os.makedirs(os.path.dirname(ref_path(name, preset)), exist_ok=True)
+        with open(ref_path(name, preset), "wb") as handle:
+            handle.write(frame)
+
+
+def _frame_after(name, seconds):
+    time.sleep(seconds)
+    cam = CAMS[name]
+    if time.time() - cam.stamp > 2:
+        raise RuntimeError("the picture is not live")
+    return cam.frame
+
+
+def autofix_positions(name):
+    """Go to favourites with a reference picture, find where the picture really is, shift all favourites."""
+    st = AUTOFIX_STATE.setdefault(name, {})
+    if st.get("running"):
+        return {"error": "already running"}
+    st["running"] = True
+    try:
+        s = settings(name)["ptz"]
+        fol = settings(name).get("follow", {})
+        gp, gt = fol.get("gain_pan", -4.0), fol.get("gain_tilt", -2.185)
+        refs = [p for p in s["presets"] if os.path.exists(ref_path(name, p["name"]))]
+        if not refs:
+            return {"error": "no favourite has a reference picture yet: save or re-save a favourite first"}
+        best = None
+        for p in refs[:3]:
+            ref = _grey(open(ref_path(name, p["name"]), "rb").read())
+            x, y = p["x"], p["y"]
+            # Coarse search first when the picture does not match at all (big shift after a restart).
+            tries = [(0, 0), (0, 0.1), (0, -0.1), (0, 0.2), (0, -0.2), (0.12, 0), (-0.12, 0), (0.12, 0.15), (-0.12, 0.15)]
+            found = None
+            for dx, dy in tries:
+                tx, ty = min(1, max(0, x + dx)), min(1, max(0, y + dy))
+                ptz_goto(name, tx, ty, quiet=8)
+                sx, sy, sure = _shift(ref, _grey(_frame_after(name, 4)))
+                if sure > 7 and abs(sx) < 0.45 and abs(sy) < 0.45:
+                    found = (tx, ty, sx, sy, sure)
+                    break
+            if not found:
+                continue
+            tx, ty, sx, sy, sure = found
+            for _ in range(3):  # refine: move by the measured shift
+                if abs(sx) < 0.02 and abs(sy) < 0.02:
+                    break
+                tx = min(1, max(0, tx - sx / gp * 0.9)); ty = min(1, max(0, ty - sy / gt * 0.9))
+                ptz_goto(name, tx, ty, quiet=8)
+                sx, sy, sure = _shift(ref, _grey(_frame_after(name, 3.5)))
+            if sure > 7 and (best is None or sure > best[4]):
+                best = (p, tx, ty, (abs(sx) + abs(sy)), sure)
+            if best and best[3] < 0.03:
+                break
+        if not best:
+            report = {"error": "could not recognise any favourite's picture (too dark, or the view changed a lot)"}
+        else:
+            p, tx, ty, err, sure = best
+            dx, dy = tx - p["x"], ty - p["y"]
+            for q in s["presets"]:
+                q["x"] = round(min(1.0, max(0.0, q["x"] + dx)), 4); q["y"] = round(min(1.0, max(0.0, q["y"] + dy)), 4)
+            save_settings()
+            ptz_goto(name, p["x"], p["y"])
+            report = {"ok": True, "from": p["name"], "shift": {"x": round(dx, 4), "y": round(dy, 4)}, "sure": round(sure)}
+        st["last"] = report
+        st["restart_seen"] = 0
+        log(f"{name}: auto-fix positions {report}")
+        return report
+    except RuntimeError as error:
+        return {"error": str(error)}
+    finally:
+        st["running"] = False
+
+
+def watch_restarts():
+    """The 360 sends its new live-video password at every start: that is how a restart shows up."""
+    seen = 0
+    while True:
+        time.sleep(15)
+        if not TELEMETRY:
+            continue
+        with TELEMETRY.lock:
+            new = [e for e in TELEMETRY.events if e["cat"] == "password" and e["t"] > max(seen, PAGE_STARTED)]
+        if new:
+            seen = max(e["t"] for e in new)
+            for name in CAMS:
+                if "ptz" in FEATURES.get(name, ()):
+                    AUTOFIX_STATE.setdefault(name, {})["restart_seen"] = seen
+                    log(f"{name}: camera restart seen at {time.strftime('%H:%M', time.localtime(seen))}; favourites may be off")
+
+
+def lock_enforce(name):
+    """Locked: the camera's own tracking must stay off (it may switch it on again after a restart)."""
+    try:
+        urllib.request.urlopen(f"{CONTROLS[name]}/tracking?on=0", timeout=4).read()
+    except Exception:
+        pass
+
+
+def lock_loop():
+    while True:
+        time.sleep(60)
+        for name in CAMS:
+            if settings(name).get("ptz", {}).get("locked"):
+                lock_enforce(name)
 
 
 def ptz_goto(name, x, y, quiet=6):
@@ -508,6 +720,9 @@ def trigger(name, info):
     log(f"{name}: motion event ({info})")
     if cfg.get("notify") and now - LAST_NOTIFY.get(name, 0) > NOTIFY_GAP:
         LAST_NOTIFY[name] = now
+        who = (info.get('name') or ('Stranger' if info.get('label') == 'person' else info.get('label')) or 'movement').capitalize()
+        push_alert(f"{who} at the {name} camera", f"{who} at {stamp.strftime('%H:%M:%S')} (you are Away).", "urgent", name,
+                   os.path.relpath(pic, SAVE_ROOT))
         threading.Thread(target=notify_phone, args=(name, f"{(info.get('name') or ('Stranger' if info.get('label') == 'person' else info.get('label')) or 'movement').capitalize()} at {stamp.strftime('%H:%M:%S')}"),
                          daemon=True).start()
 
@@ -526,6 +741,61 @@ class AddonContext:
     @staticmethod
     def register(action, name, fn):
         ADDON_ACTIONS[(action, name)] = fn
+
+    @staticmethod
+    def manual(name):
+        return time.time() < MANUAL_UNTIL.get(name, 0)
+
+    @staticmethod
+    def has_control(name, kind):
+        if name not in CONTROLS:
+            return False
+        return kind != "ir" or "ptz" not in FEATURES.get(name, ())  # night vision on/off: iWFCam cameras
+
+    @staticmethod
+    def control(name, path):
+        with urllib.request.urlopen(f"{CONTROLS[name]}/{path}", timeout=4) as r:
+            return r.read()
+
+    @staticmethod
+    def set_quality(name, level):
+        if name not in CONTROLS:
+            return
+        if "ptz" in FEATURES.get(name, ()):
+            path = "quality?q=" + ("fhd" if level == "high" else "hd")
+        else:
+            path = "control/resolution?size=" + ("1920x1080" if level == "high" else "640x360")
+        urllib.request.urlopen(f"{CONTROLS[name]}/{path}", timeout=4).read()
+
+    @staticmethod
+    def notify(title, text):
+        push_alert(title, text, "action")
+        if NTFY and os.path.exists(NTFY_TOPIC_FILE):
+            notify_phone(title, text)
+
+    @staticmethod
+    def page_settings():
+        return SETTINGS.setdefault("_page", {})
+
+    @staticmethod
+    def set_home(on, reason):
+        page = SETTINGS.setdefault("_page", {})
+        if page.get("home", False) != on:
+            page["home"] = on
+            save_settings()
+            log(f"home mode {'on' if on else 'off'} ({reason})")
+
+    @staticmethod
+    def events():
+        return list(EVENTS)
+
+    @staticmethod
+    def save_root():
+        return SAVE_ROOT
+
+    @staticmethod
+    def locked(name):
+        return bool(settings(name).get("ptz", {}).get("locked"))
 
     @staticmethod
     def ptz_state(name):
@@ -579,6 +849,7 @@ def load_addons():
             spec.loader.exec_module(module)
             module.Addon(AddonContext()).start()
             loaded.append(file[:-3])
+            ADDON_MODULES[file[:-3]] = module
         except Exception as error:
             log(f"add-on {file} failed to start: {error}")
     log(f"add-ons: {', '.join(loaded) or 'none'}")
@@ -586,11 +857,141 @@ def load_addons():
 
 
 ADDONS = []
+ADDON_MODULES = {}  # add-on name -> its module (e.g. the narrator's write_text for the daily story)
+
+
+def day_story(date):
+    """A short written story of one day's events, by the local language model."""
+    narr = ADDON_MODULES.get("narrator")
+    if not narr:
+        return {"error": "the narrator add-on is not loaded"}
+    day = [e for e in EVENTS if time.strftime("%Y-%m-%d", time.localtime(e["time"])) == date]
+    lines = []
+    for e in day:
+        desc = narr.DESCRIPTIONS.get(e.get("picture") or "", {}).get("desc") or ""
+        lines.append(f"{time.strftime('%H:%M', time.localtime(e['time']))} {e['cam']}: {e.get('label') or 'movement'}. {desc}")
+    calls = ""
+    if TELEMETRY:
+        snap = TELEMETRY.snapshot(10**12)
+        if date == time.strftime("%Y-%m-%d"):
+            calls = f"The cameras tried to call their vendor clouds {snap['today']:,} times today; none of it left the house."
+    if not lines:
+        return {"date": date, "text": "Nothing was recorded on " + date + ". " + calls, "events": 0}
+    prompt = ("You write the daily summary for a home camera system, for the owner. Plain English, friendly, short: "
+              "a title line, then 5-10 sentences in time order, grouping repeats (for example 'the cat came by three times "
+              "in the afternoon'). Mention anything unusual first if there is something. Do not invent anything that is not in the list.\n\n"
+              f"Date: {date}. Events (time, camera, what the detector saw, description):\n" + "\n".join(lines[-80:]) +
+              ("\n\n" + calls if calls else ""))
+    try:
+        text = narr.write_text(prompt)
+    except Exception as error:
+        return {"error": f"language model not answering: {error}"}
+    folder = os.path.join(SAVE_ROOT, "reports")
+    os.makedirs(folder, exist_ok=True)
+    with open(os.path.join(folder, f"story-{date}.md"), "w", encoding="utf-8") as handle:
+        handle.write(text + "\n")
+    return {"date": date, "text": text, "events": len(day)}
+
+
+def story_at_night():
+    """Write the day's story at 22:00 and send it to the phone (if phone messages are set up)."""
+    done = ""
+    while True:
+        time.sleep(60)
+        today = time.strftime("%Y-%m-%d")
+        if time.strftime("%H:%M") >= "22:00" and done != today:
+            done = today
+            r = day_story(today)
+            log(f"daily story: {r.get('error') or str(r.get('events')) + ' events'}")
+            if r.get("text") and NTFY and os.path.exists(NTFY_TOPIC_FILE):
+                notify_phone("today", r["text"][:3500])
 
 
 TELEMETRY = None  # live call-home monitor (telemetry.py), started in main()
 TELEMETRY_PAGE = os.path.join(HERE, "telemetry.html")
 CAMMEDIA_URL = CFG["camera_machine"]["stand_in_media_url"].rstrip("/")  # the 360 stand-in cloud's caught uploads
+
+# ---------------------------------------------------------------- phone app: alerts, pairing, devices
+# The Android app (bigeye-android) shows this same page and keeps a long-poll on /app/alerts for the few
+# alerts that need the owner: a person while Away, a camera gone for 10 minutes, the guard asking for help.
+# The phone reaches BigEye through a second listener (--app-port) that only answers paired devices.
+import hashlib  # noqa: E402
+import hmac  # noqa: E402
+import secrets  # noqa: E402
+
+ALERTS = collections.deque(maxlen=200)
+ALERT_SEQ = [int(time.time() * 10)]  # keeps growing across restarts, so the phone never misses one
+ALERT_COND = threading.Condition()
+APP_DIR = os.path.expanduser("~/.config/sentinel-bigeye")
+DEVICES_FILE = os.path.join(APP_DIR, "app-devices.json")   # only key hashes are stored
+APK_FILE = os.path.join(APP_DIR, "android", "sentinel-bigeye.apk")
+PAIR_CODE = {"code": None, "until": 0}
+DEVICES_LOCK = threading.Lock()
+
+
+def push_alert(title, text, level="action", cam=None, picture=None):
+    """level: 'urgent' (a person while Away) or 'action' (something needs the owner)."""
+    with ALERT_COND:
+        ALERT_SEQ[0] += 1
+        ALERTS.append({"id": ALERT_SEQ[0], "t": round(time.time()), "title": title, "text": text,
+                       "level": level, "cam": cam, "picture": picture})
+        ALERT_COND.notify_all()
+
+
+def load_devices():
+    try:
+        with open(DEVICES_FILE, encoding="utf-8") as handle:
+            return json.load(handle)
+    except (OSError, ValueError):
+        return []
+
+
+def save_devices(devices):
+    os.makedirs(APP_DIR, exist_ok=True)
+    tmp = DEVICES_FILE + ".tmp"
+    with open(os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600), "w", encoding="utf-8") as handle:
+        json.dump(devices, handle, indent=1)
+    os.replace(tmp, DEVICES_FILE)
+
+
+def device_for_key(key):
+    if not key or len(key) < 20:
+        return None
+    digest = hashlib.sha256(key.encode()).hexdigest()
+    with DEVICES_LOCK:
+        devices = load_devices()
+        for d in devices:
+            if hmac.compare_digest(d["key_sha256"], digest):
+                if time.time() - d.get("last_seen", 0) > 300:
+                    d["last_seen"] = round(time.time())
+                    save_devices(devices)
+                return d
+    return None
+
+
+def camera_watch():
+    """A camera that was live and has been gone for 10 minutes is worth an alert (once, until it is back)."""
+    since, ever, told = {}, set(), set()
+    while True:
+        now = time.time()
+        for name, cam in CAMS.items():
+            live = cam.stamp and now - cam.stamp < 15
+            if live:
+                ever.add(name)
+                since.pop(name, None)
+                if name in told:
+                    told.discard(name)
+                    push_alert(f"{name} camera is back", f"The {name} camera has a picture again.", "info", name)
+                continue
+            if name not in ever:
+                continue  # never had a picture since BigEye started (switched off): nothing to report
+            since.setdefault(name, now)
+            if now - since[name] > 600 and name not in told:
+                told.add(name)
+                push_alert(f"{name} camera offline", f"No picture from the {name} camera for 10 minutes. "
+                           "Try Reconnect on the page; if that does not help, check the camera's power.", "action", name)
+        time.sleep(10)
+
 
 # ---------------------------------------------------------------- web server
 
@@ -653,7 +1054,10 @@ class Handler(BaseHTTPRequestHandler):
                 item["ai"] = {"down": True} if ai.get("down") else {"found": ai["found"] if now - ai["t"] < 3 else []}
             if "ptz" in FEATURES.get(name, ()):
                 p = settings(name)["ptz"]
-                item["ptz"] = {"x": p["x"], "y": p["y"], "known": p["known"]}
+                item["ptz"] = {"x": p["x"], "y": p["y"], "known": p["known"],
+                               "restarted": AUTOFIX_STATE.get(name, {}).get("restart_seen", 0),
+                               "fixing": AUTOFIX_STATE.get(name, {}).get("running", False),
+                               "refs": sum(os.path.exists(ref_path(name, x["name"])) for x in p["presets"])}
                 if st.get("follow"):
                     item["follow"] = st["follow"]
             base = CONTROLS.get(name)
@@ -661,11 +1065,12 @@ class Handler(BaseHTTPRequestHandler):
                 try:
                     with urllib.request.urlopen(f"{base}/status", timeout=2) as r:
                         st = json.load(r)
+                    item["reachable"] = bool(st.get("connected", True))
                     if st.get("status_seen"):
                         item["battery"] = st.get("battery_pct")
                         item["charging"] = st.get("charging")
                 except Exception:
-                    pass
+                    item["reachable"] = False
                 # What the camera itself says it streams (iWFCam bridges only).
                 if "ptz" not in FEATURES.get(name, ()):
                     try:
@@ -759,6 +1164,8 @@ class Handler(BaseHTTPRequestHandler):
 
     def _ptz(self, name, what):
         q, s = self._query(), settings(name)["ptz"]
+        if what in ("move", "goto", "go", "realign"):  # the owner is steering: follow must not pull back
+            MANUAL_UNTIL[name] = time.time() + MANUAL_PAUSE
         try:
             if what == "move":
                 d = q.get("dir")
@@ -784,11 +1191,40 @@ class Handler(BaseHTTPRequestHandler):
                     return self._send(400, b"name missing")
                 s["presets"] = [p for p in s["presets"] if p["name"] != label] + [{"name": label, "x": s["x"], "y": s["y"]}]
                 save_settings()
+                save_reference(name, label)  # the picture it should show, for auto-fix after a restart
                 return self._json(s)
             if what == "delete":
                 s["presets"] = [p for p in s["presets"] if p["name"] != q.get("name")]
                 save_settings()
                 return self._json(s)
+            if what == "reference":  # the camera shows the right view of this favourite now: remember it
+                if not any(p["name"] == q.get("name") for p in s["presets"]):
+                    return self._send(404, b"no such position")
+                save_reference(name, q["name"])
+                return self._json({"saved": q["name"]})
+            if what == "autofix":
+                MANUAL_UNTIL[name] = time.time() + 120
+                return self._json(autofix_positions(name))
+            if what == "lock":
+                s["locked"] = q.get("on") == "1"
+                save_settings()
+                if s["locked"]:
+                    lock_enforce(name)
+                log(f"{name}: position lock {'on' if s['locked'] else 'off'}")
+                return self._json(s)
+            if what == "realign":
+                # After a camera restart the motor is calibrated again and every saved position is off
+                # by the same amount. The owner aims at where one favourite should look; shift them all.
+                ref = next((p for p in s["presets"] if p["name"] == q.get("name")), None)
+                if not ref:
+                    return self._send(404, b"no such position")
+                dx, dy = s["x"] - ref["x"], s["y"] - ref["y"]
+                for p in s["presets"]:
+                    p["x"] = round(min(1.0, max(0.0, p["x"] + dx)), 4)
+                    p["y"] = round(min(1.0, max(0.0, p["y"] + dy)), 4)
+                save_settings()
+                log(f"{name}: favourites realigned from '{ref['name']}' by pan {dx:+.3f}, tilt {dy:+.3f}")
+                return self._json(dict(s, shift={"x": round(dx, 4), "y": round(dy, 4)}))
             if what == "invert":
                 axis = "invert_pan" if q.get("axis") == "pan" else "invert_tilt"
                 s[axis] = not s[axis]
@@ -809,10 +1245,7 @@ class Handler(BaseHTTPRequestHandler):
             if body is None:
                 return self._send(400, b"JSON body expected")
             if "zones" in body:
-                zones = []
-                for z in body["zones"][:20]:
-                    if isinstance(z, list) and len(z) == 4 and all(isinstance(v, (int, float)) for v in z):
-                        zones.append([round(min(1, max(0, float(v))), 4) for v in z])
+                zones = [z for z in (clean_shape(z) for z in body["zones"][:20]) if z]
                 m["zones"] = zones
                 owner = m.get("zones_for")
                 ptz = settings(name).get("ptz")
@@ -831,6 +1264,29 @@ class Handler(BaseHTTPRequestHandler):
                 m["record_on"] = body["record_on"]
             if "sens" in body:
                 m["sens"] = max(1, min(100, int(body["sens"])))
+            if isinstance(body.get("auto"), dict):
+                a = settings(name).setdefault("auto", {})
+                for k in ("night", "quality", "timelapse"):
+                    if k in body["auto"]:
+                        a[k] = bool(body["auto"][k])
+            if isinstance(body.get("privacy"), list):
+                rects = [z for z in (clean_shape(z) for z in body["privacy"][:12]) if z]
+                settings(name)["privacy"] = rects
+                CAMS[name].privacy = rects
+                CAMS[name].restart_reader()
+            if "osd" in body:
+                settings(name)["osd"] = bool(body["osd"])
+                CAMS[name].osd = bool(body["osd"])
+                CAMS[name].restart_reader()
+            if any(k in body for k in ("deflicker", "denoise", "night_boost")):
+                enh = settings(name).setdefault("enhance", {})
+                for k in ("deflicker", "denoise"):
+                    if k in body:
+                        enh[k] = bool(body[k])
+                if "night_boost" in body:
+                    enh["night_boost"] = max(0, min(2, int(body["night_boost"])))
+                CAMS[name].enhance = dict(enh)
+                CAMS[name].restart_reader()
             if "brightness" in body or "contrast" in body:
                 pic = settings(name).setdefault("picture", {"brightness": 0, "contrast": 0})
                 for key in ("brightness", "contrast"):
@@ -840,7 +1296,9 @@ class Handler(BaseHTTPRequestHandler):
                 CAMS[name].restart_reader()
             save_settings()
         self._json(dict(m, record_on=m.get("record_on", "person"), ai=m.get("ai", True), skip_known=m.get("skip_known", True),
-                        picture=settings(name).get("picture", {"brightness": 0, "contrast": 0})))
+                        picture=settings(name).get("picture", {"brightness": 0, "contrast": 0}),
+                        enhance=settings(name).get("enhance", {}), auto=settings(name).get("auto", {}),
+                        privacy=settings(name).get("privacy", []), osd=settings(name).get("osd", False)))
 
     def _saved_file(self, rest):
         rel = urllib.parse.unquote(rest)
@@ -867,10 +1325,89 @@ class Handler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(body)
 
+
+    # ---- phone app
+    remote = False  # True in AppHandler (the phone's listener)
+
+    def _app(self, what):
+        q = self._query()
+        if what == "alerts":  # long-poll: ?after=<id>&wait=<s>; after=-1 -> only the newest id
+            after = int(q.get("after", "-1") or -1)
+            if after < 0:
+                return self._json({"alerts": [], "last": ALERT_SEQ[0]})
+            if after > ALERT_SEQ[0]:
+                after = 0  # BigEye restarted: numbering began again
+            deadline = time.time() + min(55.0, float(q.get("wait", "0") or 0))
+            with ALERT_COND:
+                while ALERT_SEQ[0] <= after and time.time() < deadline:
+                    ALERT_COND.wait(max(0.1, deadline - time.time()))
+                new = [a for a in ALERTS if a["id"] > after]
+            return self._json({"alerts": new, "last": ALERT_SEQ[0]})
+        if what == "pair-code" and not self.remote:  # shown on the page on this PC only
+            PAIR_CODE.update(code="".join(secrets.choice("ABCDEFGHJKLMNPQRSTUVWXYZ23456789") for _ in range(8)),
+                             until=time.time() + 600)
+            return self._json({"code": PAIR_CODE["code"], "valid_s": 600, "apk": os.path.exists(APK_FILE),
+                               "address": CFG.get("app", {}).get("phone_url", "")})
+        if what == "pair":  # the app trades the code (shown on the PC) for its own long key
+            body = self._body_json() or {}
+            code = str(body.get("code") or q.get("code") or "").strip().upper()
+            if not (PAIR_CODE["code"] and time.time() < PAIR_CODE["until"] and hmac.compare_digest(code, PAIR_CODE["code"])):
+                time.sleep(1.5)
+                return self._json({"error": "wrong or expired code; make a new one on the PC"}, 403)
+            PAIR_CODE.update(code=None, until=0)
+            key = secrets.token_urlsafe(32)
+            name = str(body.get("name") or q.get("name") or "phone")[:40]
+            with DEVICES_LOCK:
+                devices = load_devices()
+                devices.append({"id": secrets.token_hex(4), "name": name, "key_sha256": hashlib.sha256(key.encode()).hexdigest(),
+                                "paired": round(time.time()), "last_seen": round(time.time())})
+                save_devices(devices)
+            log(f"phone app: paired '{name}'")
+            push_alert("Phone paired", f"'{name}' can now open BigEye and get alerts.", "info")
+            return self._json({"key": key, "name": name})
+        if what == "test-alert" and not self.remote:  # a real-looking alert, with a picture, marked as a test
+            cam = q.get("cam") or next((n for n, c in CAMS.items() if c.frame), None)
+            pic = None
+            if cam and CAMS[cam].frame:
+                stamp = datetime.datetime.now()
+                path = os.path.join(save_dir("motion"), f"{cam}-test-{stamp.strftime('%Y%m%d-%H%M%S')}.jpg")
+                with open(path, "wb") as handle:
+                    handle.write(CAMS[cam].frame)
+                pic = os.path.relpath(path, SAVE_ROOT)
+            push_alert(f"TEST: Stranger at the {cam} camera", f"Stranger at {time.strftime('%H:%M:%S')} (you are Away). "
+                       "This is only a test from BigEye.", "urgent", cam, pic)
+            return self._json({"ok": True, "cam": cam, "picture": pic})
+        if what == "info" and not self.remote:
+            return self._json({"address": CFG.get("app", {}).get("phone_url", ""), "apk": os.path.exists(APK_FILE)})
+        if what == "devices" and not self.remote:
+            if q.get("remove"):
+                with DEVICES_LOCK:
+                    devices = [d for d in load_devices() if d["id"] != q["remove"]]
+                    save_devices(devices)
+            return self._json([{k: d.get(k) for k in ("id", "name", "paired", "last_seen")} for d in load_devices()])
+        if what == "login":  # the app's WebView: key in a POST body -> cookie, then the page
+            body = self.rfile.read(min(int(self.headers.get("Content-Length") or 0), 400)).decode(errors="replace")
+            key = urllib.parse.parse_qs(body).get("key", [""])[0]
+            if not device_for_key(key):
+                return self._send(401, b"not paired")
+            return self._send(303, b"", extra={"Location": "/", "Set-Cookie":
+                              f"bigeye_key={key}; HttpOnly; SameSite=Strict; Path=/; Max-Age=31536000"})
+        if what == "download":  # the app itself (no secrets inside)
+            if not os.path.exists(APK_FILE):
+                return self._send(404, b"the app has not been built yet")
+            with open(APK_FILE, "rb") as handle:
+                data = handle.read()
+            return self._send(200, data, "application/vnd.android.package-archive",
+                              {"Content-Disposition": 'attachment; filename="sentinel-bigeye.apk"'})
+        return self._send(404, b"unknown")
+
     def do_GET(self):
         path = self.path.split("?")[0].strip("/")
         if path == "":
-            config = [{"name": n, "controls": n in CONTROLS, "features": sorted(FEATURES.get(n, ()))} for n in CAMS]
+            config = [{"name": n, "controls": n in CONTROLS, "features": sorted(FEATURES.get(n, ())),
+                       # picture help needs the ffmpeg reader (not the MJPEG pass-through)
+                       "enhance": not CAMS[n].passthrough()}
+                      for n in CAMS]
             with open(PAGE_FILE, encoding="utf-8") as handle:
                 page = handle.read()
             body = page.replace("__CONFIG__", json.dumps(config)).replace("__SAVEROOT__", json.dumps(win_path(SAVE_ROOT)))
@@ -878,6 +1415,8 @@ class Handler(BaseHTTPRequestHandler):
             return
         if path == "state":
             return self._state()
+        if path.startswith("app/"):
+            return self._app(path[4:])
         if path == "telemetry":
             with open(TELEMETRY_PAGE, encoding="utf-8") as handle:
                 return self._send(200, handle.read().encode(), "text/html; charset=utf-8")
@@ -919,7 +1458,24 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as error:
                 return self._send(502, str(error).encode())
         if path == "events":
-            return self._json(list(EVENTS)[-40:][::-1])
+            narr = ADDON_MODULES.get("narrator")
+            out = []
+            for e in list(EVENTS)[-40:][::-1]:
+                d = narr.DESCRIPTIONS.get(e.get("picture") or "", {}).get("desc") if narr else None
+                out.append(dict(e, desc=d) if d else e)
+            return self._json(out)
+        if path == "search":
+            narr = ADDON_MODULES.get("narrator")
+            fn = ADDON_ACTIONS.get(("narrator-search", "*"))
+            q = (self._query().get("q") or "").strip()[:200]
+            if not fn or not q:
+                return self._json([])
+            return self._json(fn(q))
+        if path == "story":
+            date = self._query().get("date") or time.strftime("%Y-%m-%d")
+            if not re.match(r"^\d{4}-\d{2}-\d{2}$", date):
+                return self._send(400, b"date=YYYY-MM-DD")
+            return self._json(day_story(date))
         if path == "addons":
             return self._json(ADDONS)
         if path.startswith("saved/"):
@@ -974,6 +1530,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json({"error": f"AI service: {error}"}, 502)
         if path.startswith("addon/"):
             parts = path.split("/")
+            if len(parts) == 3 and parts[1] == "follow-learn" and settings(parts[2]).get("ptz", {}).get("locked"):
+                return self._json({"pan": "locked", "tilt": "unlock the position first"})
             fn = ADDON_ACTIONS.get(tuple(parts[1:3])) if len(parts) == 3 else None
             if fn is None or self.command != "POST":
                 return self.send_error(404)
@@ -990,6 +1548,14 @@ class Handler(BaseHTTPRequestHandler):
                     c["return_after"] = max(10, min(3600, body["return_after"]))
                 save_settings()
             return self._json(c)
+        if path == "usage":
+            return self._json(ADDON_STATUS.get("_usage") or {"waiting": True})
+        if path == "autohome":
+            page = SETTINGS.setdefault("_page", {})
+            if self.command == "POST":
+                page["auto_home"] = not page.get("auto_home", False)
+                save_settings()
+            return self._json({"on": page.get("auto_home", False), "away_after_min": page.get("away_after_min", 45)})
         if path == "home":
             page = SETTINGS.setdefault("_page", {})
             if self.command == "POST":
@@ -1038,6 +1604,8 @@ class Handler(BaseHTTPRequestHandler):
             if base is None or parts[2] not in ALLOWED_CONTROL_PATHS:
                 self.send_error(404)
                 return
+            if parts[2] == "tracking" and "on=1" in self.path and settings(parts[1]).get("ptz", {}).get("locked"):
+                return self._send(423, b"locked: unlock the position first")
             if (parts[2] in POST_ONLY_PATHS) != (self.command == "POST"):
                 self.send_error(405)
                 return
@@ -1073,10 +1641,33 @@ class Handler(BaseHTTPRequestHandler):
             pass
 
 
+class AppHandler(Handler):
+    """The phone's listener: everything needs a paired key (header X-BigEye-Key or the app's cookie),
+    except pairing itself and downloading the app."""
+    remote = True
+
+    def do_GET(self):
+        path = self.path.split("?")[0].strip("/")
+        if path in ("app/pair", "app/login", "app/download"):
+            return super().do_GET()
+        key = self.headers.get("X-BigEye-Key") or ""
+        if not key:
+            for part in (self.headers.get("Cookie") or "").split(";"):
+                k, _, v = part.strip().partition("=")
+                if k == "bigeye_key":
+                    key = v
+        if not device_for_key(key):
+            time.sleep(0.5)
+            return self._send(401, b"Sentinel-BigEye: this device is not paired. Open the BigEye app and pair it.")
+        return super().do_GET()
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--port", type=int, default=8770)
     ap.add_argument("--bind", default="127.0.0.1")
+    ap.add_argument("--app-port", type=int, default=0, help="second listener for the phone app (paired devices only)")
+    ap.add_argument("--app-bind", default="127.0.0.1")
     ap.add_argument("--fps", type=int, default=0, help="cap on pictures per second; 0 = the camera's own rate")
     ap.add_argument("--quality", type=int, default=2, help="JPEG quality, 2 (best) to 31")
     ap.add_argument("--control", action="append", default=[], metavar="NAME=URL",
@@ -1088,10 +1679,12 @@ def main():
     args = ap.parse_args()
     for item in args.cams:
         name, url = item.split("=", 1)
-        flip = url.endswith(",flip")
-        if flip:
-            url = url[:-len(",flip")]
-        CAMS[name] = Camera(name, url, args.fps, args.quality, flip)
+        opts = set()
+        while url.rsplit(",", 1)[-1] in ("flip", "process"):
+            url, opt = url.rsplit(",", 1)
+            opts.add(opt)
+        CAMS[name] = Camera(name, url, args.fps, args.quality, "flip" in opts)
+        CAMS[name].process = "process" in opts
     global FRIGATE
     FRIGATE = args.frigate.rstrip("/") if args.frigate else None
     for item in args.control:
@@ -1105,6 +1698,12 @@ def main():
         pic = settings(name).get("picture")
         if pic:
             cam.eq = (pic.get("brightness", 0), pic.get("contrast", 0))
+        cam.enhance = dict(settings(name).get("enhance", {}))
+        cam.privacy = list(settings(name).get("privacy", []))
+        cam.osd = bool(settings(name).setdefault("osd", name in ("door", "window")))  # the door camera lost its own stamp
+        # The readers started before the settings were read (2026-11-15: clock and picture help missing after
+        # every restart until toggled). Restart each reader now so it picks them up.
+        cam.restart_reader()
     load_events()
     ADDONS.extend(load_addons())
     global TELEMETRY
@@ -1121,7 +1720,15 @@ def main():
     log("page started")
     threading.Thread(target=picture_monitor, daemon=True).start()
     threading.Thread(target=autofix_loop, daemon=True).start()
+    threading.Thread(target=lock_loop, daemon=True).start()
+    threading.Thread(target=watch_restarts, daemon=True).start()
+    threading.Thread(target=story_at_night, daemon=True).start()
+    threading.Thread(target=camera_watch, daemon=True).start()
     print(f"Sentinel-BigEye: http://localhost:{args.port}/")
+    if args.app_port:
+        app_server = ThreadingHTTPServer((args.app_bind, args.app_port), AppHandler)
+        threading.Thread(target=app_server.serve_forever, daemon=True).start()
+        print(f"Sentinel-BigEye phone app listener: {args.app_bind}:{args.app_port}")
     ThreadingHTTPServer((args.bind, args.port), Handler).serve_forever()
 
 

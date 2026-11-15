@@ -16,7 +16,7 @@ main.focus{grid-template-columns:minmax(0,3fr) minmax(0,1fr);align-items:start}
 main.focus .card:not(.big){grid-column:2}main.focus .card.big{grid-column:1;grid-row:1/span 9}
 main.focus .card:not(.big) .panel{display:none}
 .card{background:var(--card);border:1px solid var(--line);border-radius:12px;overflow:hidden;display:flex;flex-direction:column}
-.vid{position:relative;background:#000;aspect-ratio:16/9;cursor:zoom-in;user-select:none}.big .vid{cursor:zoom-out}
+.vid{position:relative;overflow:hidden;background:#000;aspect-ratio:16/9;cursor:zoom-in;user-select:none}.big .vid{cursor:zoom-out}
 .vid img{width:100%;height:100%;object-fit:contain;display:block;-webkit-user-drag:none}
 .stale .vid img{opacity:.25;filter:grayscale(1)}
 .corner{position:absolute;display:flex;gap:6px;align-items:center;font-size:12px;font-weight:600;z-index:2}
@@ -39,7 +39,9 @@ main.focus .card:not(.big) .panel{display:none}
 .zone{position:absolute;background:repeating-linear-gradient(45deg,rgba(255,179,64,.28) 0 6px,rgba(255,179,64,.1) 6px 12px);border:1px solid var(--warn)}
 .zone b{display:none;position:absolute;right:2px;top:2px;width:20px;height:20px;border-radius:6px;background:#000c;color:#fff;font:600 12px system-ui;align-items:center;justify-content:center;cursor:pointer}
 .editing .zone b{display:flex}
-.ailayer{position:absolute;pointer-events:none;z-index:1}.hide-ai .ailayer{display:none}
+.ailayer{position:absolute;pointer-events:none;z-index:1}
+.vid img{transition:transform .5s ease;transform-origin:0 0}.vid.dragging img{transition:none}
+.zoomed .ailayer,.zoomed .zones{display:none}.zoombadge{display:none}.zoomed .zoombadge{display:inline-flex}.hide-ai .ailayer{display:none}
 .aibox{position:absolute;border:2px solid var(--ok);border-radius:4px;box-shadow:0 0 0 1px #0008}
 .aibox span{position:absolute;left:-2px;top:-20px;background:var(--ok);color:#000;font:600 11px system-ui;padding:2px 6px;border-radius:4px 4px 4px 0;white-space:nowrap}
 .aibox.known{border-color:#c79bff}.aibox.known span{background:#c79bff}
@@ -69,9 +71,11 @@ details{border-top:1px solid var(--line);padding-top:10px}summary{cursor:pointer
 section.strip{padding:6px 16px 16px}section.strip h2{font-size:14px;color:var(--dim);font-weight:600;margin:6px 0 10px;display:flex;gap:10px;align-items:center}
 .list{display:flex;gap:10px;overflow-x:auto;padding-bottom:6px}
 .ev{flex:0 0 180px;background:var(--card);border:1px solid var(--line);border-radius:10px;overflow:hidden;font-size:12px}
-.ev img{width:180px;height:101px;object-fit:cover;display:block;background:#000}.ev div{padding:6px 8px}.ev a{color:var(--acc);text-decoration:none}
+.ev img{width:180px;height:101px;object-fit:cover;display:block;background:#000}
+.ev .desc{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;color:var(--dim);margin-top:4px}
+.ev{flex-basis:220px}.ev img{width:220px;height:124px}.ev div{padding:6px 8px}.ev a{color:var(--acc);text-decoration:none}
 #settings{position:fixed;right:16px;top:58px;z-index:8;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px;display:grid;gap:12px;box-shadow:0 10px 30px rgba(0,0,0,.5);width:min(420px,calc(100vw - 32px))}
-#settings[hidden]{display:none}#settings h3{margin:0;font-size:14px}
+#settings[hidden]{display:none}#usagepanel[hidden],#phonepanel[hidden]{display:none!important}#settings h3{margin:0;font-size:14px}
 #toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);display:flex;flex-direction:column;gap:6px;z-index:9;pointer-events:none;max-width:calc(100vw - 32px)}
 .t{background:#222833;border:1px solid var(--line);border-left:4px solid var(--acc);padding:9px 14px;border-radius:8px;box-shadow:0 6px 20px rgba(0,0,0,.4);animation:fade 4.5s forwards;word-break:break-all}
 .t.bad{border-left-color:var(--bad)}.t.ok{border-left-color:var(--ok)}
@@ -83,11 +87,20 @@ section.strip{padding:6px 16px 16px}section.strip h2{font-size:14px;color:var(--
 <span id="clock"></span><span class="sp"></span>
 <div class="seg" title="Open the folder on this PC"><button data-open="snapshots">📷 Pictures</button><button data-open="recordings">⏺ Recordings</button><button data-open="motion">🏃 Motion</button></div>
 <div class="seg" id="layout"><button data-l="cols1">1</button><button data-l="" class="on">2</button><button data-l="cols3">3</button></div>
+<button class="btn" id="autohome" title="Home when a known face is seen; Away after 45 min with nobody, if the last person was at the door">Auto</button>
 <div class="seg" id="homeseg" title="Home: nothing is recorded or sent. Away: people (and what you chose) are recorded."><button data-h="1">🏠 Home</button><button data-h="0">🛡 Away</button></div>
 <button class="btn" id="fixall" title="Restart the camera links on the camera machine (what helped when cameras dropped out)">🔄 Reconnect cameras</button>
 <button class="btn" id="autofix" title="Restart a camera's link by itself after 90 s without picture (at most every 10 min)">Auto-fix</button>
+<button class="btn" id="usagebtn" title="What BigEye uses of this PC, and what the guard does">📊 …</button>
+<button class="btn" id="phonebtn" title="Pair the Sentinel-BigEye app on your phone">📱 Phone app</button>
 <button class="btn" id="gear" title="Where the marks and buttons sit on the picture">⚙ Display</button>
 <button class="btn" id="fs" title="Full screen (F)">Full screen</button></header>
+<div id="usagepanel" hidden style="position:fixed;right:16px;top:58px;z-index:8;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px;box-shadow:0 10px 30px rgba(0,0,0,.5);width:min(460px,calc(100vw - 32px));display:grid;gap:10px">
+<div class="row" style="justify-content:space-between"><h3 style="margin:0;font-size:14px">📊 What BigEye uses</h3>
+<button class="btn" id="usageclose" title="Close (Esc)" style="padding:2px 9px">×</button></div><div id="usagebody" class="hint">Measuring…</div></div>
+<div id="phonepanel" hidden style="position:fixed;right:16px;top:58px;z-index:8;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px;box-shadow:0 10px 30px rgba(0,0,0,.5);width:min(460px,calc(100vw - 32px));display:grid;gap:10px">
+<div class="row" style="justify-content:space-between"><h3 style="margin:0;font-size:14px">📱 Sentinel-BigEye on your phone</h3>
+<button class="btn" id="phoneclose" title="Close (Esc)" style="padding:2px 9px">×</button></div><div id="phonebody"></div></div>
 <div id="settings" hidden><h3>Marks on the picture</h3><div id="setrows"></div>
 <div class="hint">Saved in this browser. Everything is saved on this PC under <span id="saveroot"></span></div>
 <h3 style="margin-top:6px">🐾 Your animals</h3>
@@ -97,7 +110,11 @@ section.strip{padding:6px 16px 16px}section.strip h2{font-size:14px;color:var(--
 <button class="btn" id="facelearn">Learn this face</button></div>
 <div class="hint">Stand alone in view of that camera and look toward it now and then. It takes 15 pictures over about 20 s; more sessions (other places, with and without cap) make it better. Faces are stored only on this PC, as numbers.</div></div>
 <main id="grid"></main>
-<section class="strip" id="mv" hidden><h2>Motion events <span class="hint">picture when it started · click the clip to watch</span></h2><div class="list" id="mvlist"></div></section>
+<section class="strip" id="mv" hidden><h2>Motion events <span class="hint">described by the local AI · click the picture or clip</span>
+<input id="evsearch" class="btn" placeholder="Search events, e.g. cat near the door" style="margin-left:auto;min-width:240px">
+<button class="btn" id="storybtn" title="A short written story of today, by the local AI">📝 Today's story</button></h2>
+<div id="storybox" class="hint" hidden style="white-space:pre-wrap;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px;margin-bottom:10px;color:var(--txt)"></div>
+<div class="list" id="mvlist"></div></section>
 <section class="strip" id="ev" hidden><h2>AI events (Frigate)</h2><div class="list" id="evlist"></div></section>
 <div id="toast"></div>
 <script>
@@ -110,7 +127,7 @@ function el(tag, attrs, kids) {
     else if (k.slice(0, 2) === 'on') e.addEventListener(k.slice(2), attrs[k]);
     else e.setAttribute(k, attrs[k]);
   });
-  (kids || []).forEach(function (c) { if (c) e.appendChild(c); });
+  (kids || []).forEach(function (c) { if (c) e.appendChild(typeof c === 'string' ? document.createTextNode(c) : c); });
   return e;
 }
 function toast(text, kind) {
@@ -194,6 +211,7 @@ function renderPresets(cam, s) {
   s.presets.forEach(function (p) {
     box.appendChild(el('span', {'class': 'chip'}, [
       el('button', {text: p.name, title: 'Go to ' + p.name, onclick: function () {
+        LASTPRESET[cam] = p.name; var fb = document.getElementById('fix-' + cam); if (fb) { fb.disabled = false; fb.textContent = '⟲ Fix all from "' + p.name + '"'; }
         json('/ptz/' + cam + '/go?name=' + encodeURIComponent(p.name)).then(function (s) { showPos(cam, s); toast(title(cam) + ': going to ' + p.name, 'ok'); })
           .catch(function () { toast(title(cam) + ': could not reach the camera', 'bad'); });
       }}),
@@ -203,6 +221,23 @@ function renderPresets(cam, s) {
       }})]));
   });
   if (!s.presets.length) box.appendChild(el('span', {'class': 'hint', text: 'No positions yet.'}));
+}
+var LASTPRESET = {};
+function showLock(cam, locked) {
+  var b = document.getElementById('lock-' + cam); if (!b) return;
+  b.classList.toggle('on', !!locked); b.textContent = locked ? '🔒 Locked: only you' : '🔓 Lock position';
+}
+// Ask "are you sure" inside the button itself: browsers can silently block confirm() dialogs.
+function twoClick(btn, action) {
+  if (btn.dataset.armed === '1') { btn.dataset.armed = ''; btn.textContent = btn.dataset.label; btn.classList.remove('danger'); action(); return; }
+  btn.dataset.label = btn.textContent; btn.dataset.armed = '1'; btn.textContent = 'Click again to confirm'; btn.classList.add('danger');
+  setTimeout(function () { if (btn.dataset.armed === '1') { btn.dataset.armed = ''; btn.textContent = btn.dataset.label; btn.classList.remove('danger'); } }, 5000);
+}
+function fixAll(cam) {
+  var name = LASTPRESET[cam]; if (!name) return;
+  json('/ptz/' + cam + '/realign?name=' + encodeURIComponent(name)).then(function (s) {
+    renderPresets(cam, s); toast(title(cam) + ': all favourites fixed (moved pan ' + Math.round(s.shift.x * 100) + ' %, tilt ' + Math.round(s.shift.y * 100) + ' %)', 'ok');
+  }).catch(function () { toast('Could not fix the positions', 'bad'); });
 }
 function savePreset(cam) {
   var name = prompt('Name for this position (same name replaces the old one):');
@@ -275,18 +310,38 @@ function layoutZones(card) {
   ['.zones', '.ailayer'].forEach(function (sel) { var z = card.querySelector(sel); if (!z) return;
     z.style.left = r.left + 'px'; z.style.top = r.top + 'px'; z.style.width = r.width + 'px'; z.style.height = r.height + 'px'; });
 }
+var DRAWTOOL = store('drawtool') || 'pen';  // 'pen' = free hand, 'box' = rectangle
+function shapeBox(q) {  // bounding box of a rectangle or a free-hand shape
+  if (q.poly) { var xs = q.poly.map(function (p) { return p[0]; }), ys = q.poly.map(function (p) { return p[1]; });
+    return [Math.min.apply(null, xs), Math.min.apply(null, ys), Math.max.apply(null, xs), Math.max.apply(null, ys)]; }
+  return q;
+}
 function drawZones(cam) {
   var card = document.getElementById('card-' + cam), z = card.querySelector('.zones');
-  z.querySelectorAll('.zone').forEach(function (n) { n.remove(); });
+  z.querySelectorAll('.zone,.zsvg,.zdel').forEach(function (n) { n.remove(); });
   var cnt = card.querySelector('.zonecount');
   if (cnt) { var k = (MOTION[cam].zones || []).length, where = MOTION[cam].zones_for ? ' for position "' + MOTION[cam].zones_for + '"' : (has(CAMS.filter(function (c) { return c.name === cam; })[0], 'ptz') ? ' (no saved position here)' : '');
     cnt.textContent = (k ? k + ' zone' + (k > 1 ? 's' : '') : 'no zones') + where + (k ? ' · shown only while drawing' : ''); }
-  (MOTION[cam].zones || []).forEach(function (q, i) {
-    var n = el('div', {'class': 'zone', style: 'left:' + q[0] * 100 + '%;top:' + q[1] * 100 + '%;width:' + (q[2] - q[0]) * 100 + '%;height:' + (q[3] - q[1]) * 100 + '%'},
-      [el('b', {text: '×', title: 'Remove this zone', onpointerdown: function (e) { e.stopPropagation(); }, onclick: function (e) {
-        e.stopPropagation(); MOTION[cam].zones.splice(i, 1); saveMotion(cam, {zones: MOTION[cam].zones}); }})]);
-    z.appendChild(n);
+  var privacy = card.editMode === 'privacy', list = (privacy ? MOTION[cam].privacy : MOTION[cam].zones) || [];
+  var NS = 'http://www.w3.org/2000/svg', svg = document.createElementNS(NS, 'svg');
+  svg.setAttribute('class', 'zsvg'); svg.setAttribute('viewBox', '0 0 100 100'); svg.setAttribute('preserveAspectRatio', 'none');
+  svg.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;pointer-events:none';
+  list.forEach(function (q, i) {
+    var shape;
+    if (q.poly) { shape = document.createElementNS(NS, 'polygon'); shape.setAttribute('points', q.poly.map(function (p) { return (p[0] * 100) + ',' + (p[1] * 100); }).join(' ')); }
+    else { shape = document.createElementNS(NS, 'rect'); shape.setAttribute('x', q[0] * 100); shape.setAttribute('y', q[1] * 100); shape.setAttribute('width', (q[2] - q[0]) * 100); shape.setAttribute('height', (q[3] - q[1]) * 100); }
+    shape.setAttribute('fill', privacy ? 'rgba(0,0,0,.6)' : 'rgba(255,179,64,.28)');
+    shape.setAttribute('stroke', privacy ? '#fff' : '#ffb340'); shape.setAttribute('stroke-width', '0.4'); shape.setAttribute('vector-effect', 'non-scaling-stroke');
+    svg.appendChild(shape);
+    var bb = shapeBox(q);
+    z.appendChild(el('b', {'class': 'zdel', text: '×', title: privacy ? 'Remove this mask' : 'Remove this zone',
+      style: 'position:absolute;left:calc(' + bb[2] * 100 + '% - 22px);top:' + bb[1] * 100 + '%;width:20px;height:20px;border-radius:6px;background:#000c;color:#fff;font:600 12px system-ui;display:flex;align-items:center;justify-content:center;cursor:pointer;pointer-events:auto',
+      onpointerdown: function (e) { e.stopPropagation(); }, onclick: function (e) {
+        e.stopPropagation(); var rest = list.slice(); rest.splice(i, 1);
+        if (privacy) postJSON('/settings/' + cam, {privacy: rest}).then(function (m) { MOTION[cam] = m; drawZones(cam); });
+        else { MOTION[cam].zones = rest; saveMotion(cam, {zones: rest}); } }}));
   });
+  z.insertBefore(svg, z.firstChild);
   layoutZones(card);
 }
 function saveMotion(cam, change) {
@@ -294,27 +349,66 @@ function saveMotion(cam, change) {
     .catch(function () { toast(title(cam) + ': could not save the setting', 'bad'); return false; });
 }
 function zoneEditor(cam, card) {
-  var z = card.querySelector('.zones'), start = null, live = null;
+  var z = card.querySelector('.zones'), start = null, live = null, pts = null, path = null;
+  var NS = 'http://www.w3.org/2000/svg';
   function at(e) { var b = z.getBoundingClientRect();
     return [Math.min(1, Math.max(0, (e.clientX - b.left) / b.width)), Math.min(1, Math.max(0, (e.clientY - b.top) / b.height))]; }
   z.addEventListener('pointerdown', function (e) {
-    if (!card.classList.contains('editing')) return;
+    if (!card.classList.contains('editing') || e.target.classList.contains('zdel')) return;
     e.preventDefault(); e.stopPropagation(); z.setPointerCapture(e.pointerId);
-    start = at(e); live = el('div', {'class': 'zone'}); z.appendChild(live);
+    start = at(e);
+    if (DRAWTOOL === 'pen') {
+      pts = [start];
+      var svg = z.querySelector('.zsvg'); path = document.createElementNS(NS, 'polyline');
+      path.setAttribute('fill', card.editMode === 'privacy' ? 'rgba(0,0,0,.4)' : 'rgba(255,179,64,.2)');
+      path.setAttribute('stroke', card.editMode === 'privacy' ? '#fff' : '#ffb340'); path.setAttribute('stroke-width', '0.5'); path.setAttribute('vector-effect', 'non-scaling-stroke');
+      if (svg) svg.appendChild(path);
+    } else { live = el('div', {'class': 'zone'}); z.appendChild(live); }
   });
   z.addEventListener('pointermove', function (e) {
     if (!start) return; var p = at(e);
+    if (pts) {
+      var last = pts[pts.length - 1];
+      if (Math.abs(p[0] - last[0]) + Math.abs(p[1] - last[1]) > 0.006) { pts.push(p);
+        if (path) path.setAttribute('points', pts.map(function (q) { return (q[0] * 100) + ',' + (q[1] * 100); }).join(' ')); }
+      return;
+    }
     live.style.left = Math.min(start[0], p[0]) * 100 + '%'; live.style.top = Math.min(start[1], p[1]) * 100 + '%';
     live.style.width = Math.abs(p[0] - start[0]) * 100 + '%'; live.style.height = Math.abs(p[1] - start[1]) * 100 + '%';
   });
   z.addEventListener('pointerup', function (e) {
-    if (!start) return; var p = at(e), q = [Math.min(start[0], p[0]), Math.min(start[1], p[1]), Math.max(start[0], p[0]), Math.max(start[1], p[1])];
-    start = null; live.remove();
-    if (q[2] - q[0] < 0.02 || q[3] - q[1] < 0.02) return;  // a click, not a drag
-    MOTION[cam].zones = (MOTION[cam].zones || []).concat([q]);
+    if (!start) return; var p = at(e), shape = null;
+    if (pts) {
+      if (path) path.remove();
+      var bb = shapeBox({poly: pts});
+      if (pts.length >= 3 && bb[2] - bb[0] > 0.02 && bb[3] - bb[1] > 0.02) {
+        var step = Math.max(1, Math.ceil(pts.length / 120));  // keep it light: at most ~120 points
+        shape = {poly: pts.filter(function (q, i) { return i % step === 0; }).map(function (q) { return [Math.round(q[0] * 10000) / 10000, Math.round(q[1] * 10000) / 10000]; })};
+      }
+      pts = null; path = null;
+    } else {
+      var q = [Math.min(start[0], p[0]), Math.min(start[1], p[1]), Math.max(start[0], p[0]), Math.max(start[1], p[1])];
+      live.remove(); live = null;
+      if (q[2] - q[0] >= 0.02 && q[3] - q[1] >= 0.02) shape = q;
+    }
+    start = null;
+    if (!shape) return;  // a click, not a drag
+    if (card.editMode === 'privacy') {
+      var pm = (MOTION[cam].privacy || []).concat([shape]);
+      postJSON('/settings/' + cam, {privacy: pm}).then(function (m) { MOTION[cam] = m; drawZones(cam); toast(title(cam) + ': privacy mask added (picture back in 2-5 s)', 'ok');
+        var pc = document.getElementById('pmcount-' + cam); if (pc) pc.textContent = m.privacy.length + ' mask(s) active'; });
+      return;
+    }
+    MOTION[cam].zones = (MOTION[cam].zones || []).concat([shape]);
     saveMotion(cam, {zones: MOTION[cam].zones}).then(function () { toast(title(cam) + ': ignore zone added', 'ok'); });
   });
   z.addEventListener('click', function (e) { if (card.classList.contains('editing')) e.stopPropagation(); });
+}
+function toolSeg() {
+  var t = seg([{label: '✏️ Pen', v: 'pen'}, {label: '▭ Box', v: 'box'}], function (o) { DRAWTOOL = o.v; store('drawtool', o.v);
+    document.querySelectorAll('.toolseg').forEach(function (x) { if (x.set) x.set(o.label); }); }, DRAWTOOL === 'pen' ? '✏️ Pen' : '▭ Box');
+  t.classList.add('toolseg');
+  return t;
 }
 function motionPanel(c, card) {
   var cam = c.name;
@@ -344,7 +438,7 @@ function motionPanel(c, card) {
   return el('div', {'class': 'panel', style: 'padding:0;gap:10px'}, [
     row('Motion sensor', [onoff, meter]), row('Record when', [whenSeg]),
     el('div', {'class': 'hint', text: 'Movement wakes it up; the AI (on this PC) checks what it is. A person on the TV counts too: draw an ignore zone over the TV.'}), sens,
-    row('Ignore zones', [drawBtn, el('button', {'class': 'btn', text: 'Clear all', onclick: function () {
+    row('Ignore zones', [drawBtn, toolSeg(), el('button', {'class': 'btn', text: 'Clear all', onclick: function () {
       if (confirm('Remove all ignore zones on ' + cam + '?')) saveMotion(cam, {zones: []}); }}), el('span', {'class': 'hint zonecount'})]),
     row('On motion', [recSeg, phone]),
     row('Known faces', [knownSeg]),
@@ -414,6 +508,52 @@ function liveLoop(cam, img) {
   next();
 }
 
+// ---------- digital zoom: mouse wheel, drag to move, double-click to reset; optional auto-zoom on people
+var ZOOM = {};  // camera -> {z, cx, cy, auto, last}
+function applyZoom(cam) {
+  var card = document.getElementById('card-' + cam), img = card.querySelector('img'), st = ZOOM[cam], r = picRect(card);
+  var z = Math.max(1, Math.min(4, st.z)), half = 0.5 / z;
+  st.cx = Math.max(half, Math.min(1 - half, st.cx)); st.cy = Math.max(half, Math.min(1 - half, st.cy));
+  var W = card.querySelector('.vid').clientWidth, H = card.querySelector('.vid').clientHeight;
+  var px = r.left + st.cx * r.width, py = r.top + st.cy * r.height;
+  // origin top-left: point p goes to (W/2, H/2) -> translate = centre - z * p
+  img.style.transform = z > 1.001 ? 'translate(' + (W / 2 - z * px) + 'px,' + (H / 2 - z * py) + 'px) scale(' + z + ')' : '';
+  card.classList.toggle('zoomed', z > 1.001);
+  var zb = card.querySelector('.zoombadge'); if (zb) zb.textContent = '🔍 ' + z.toFixed(1) + '×' + (st.auto ? ' auto' : '');
+}
+function zoomSetup(cam, card) {
+  var vid = card.querySelector('.vid'), st = ZOOM[cam] = {z: 1, cx: 0.5, cy: 0.5, auto: store(cam + ':autozoom') === '1', last: 0};
+  function norm(e) { var r = picRect(card), b = vid.getBoundingClientRect();
+    // undo the current zoom to find the picture point under the mouse
+    var x = (e.clientX - b.left), y = (e.clientY - b.top), W = vid.clientWidth, H = vid.clientHeight;
+    var px = (x - (W / 2 - st.z * (r.left + st.cx * r.width))) / st.z, py = (y - (H / 2 - st.z * (r.top + st.cy * r.height))) / st.z;
+    if (st.z <= 1.001) { px = x; py = y; }
+    return [(px - r.left) / r.width, (py - r.top) / r.height]; }
+  vid.addEventListener('wheel', function (e) {
+    if (card.classList.contains('editing')) return;
+    e.preventDefault(); var u = norm(e), z0 = st.z, z1 = Math.max(1, Math.min(4, z0 * (e.deltaY < 0 ? 1.25 : 0.8)));
+    st.cx = u[0] - (u[0] - st.cx) * z0 / z1; st.cy = u[1] - (u[1] - st.cy) * z0 / z1; st.z = z1;
+    if (z1 <= 1.001) { st.cx = 0.5; st.cy = 0.5; } st.manual = Date.now(); applyZoom(cam);
+  }, {passive: false});
+  var drag = null;
+  vid.addEventListener('pointerdown', function (e) { if (st.z > 1.001 && !card.classList.contains('editing') && e.button === 0) {
+    drag = {x: e.clientX, y: e.clientY, cx: st.cx, cy: st.cy, moved: false}; vid.classList.add('dragging'); } });
+  window.addEventListener('pointermove', function (e) { if (!drag) return; var r = picRect(card);
+    var dx = e.clientX - drag.x, dy = e.clientY - drag.y; if (Math.abs(dx) + Math.abs(dy) > 4) drag.moved = true;
+    st.cx = drag.cx - dx / (r.width * st.z); st.cy = drag.cy - dy / (r.height * st.z); st.manual = Date.now(); applyZoom(cam); });
+  window.addEventListener('pointerup', function () { if (drag) { vid.classList.remove('dragging'); card.dragMoved = drag.moved; drag = null; } });
+  vid.addEventListener('dblclick', function (e) { e.preventDefault(); st.z = 1; st.cx = st.cy = 0.5; st.manual = Date.now(); applyZoom(cam); });
+}
+function autoZoom(cam, found) {
+  var st = ZOOM[cam]; if (!st || !st.auto || Date.now() - (st.manual || 0) < 8000) return;
+  var ppl = (found || []).filter(function (d) { return d.label === 'person' || d.label === 'cat' || d.label === 'dog'; });
+  if (!ppl.length) { if (Date.now() - st.last > 5000 && st.z > 1.001) { st.z = 1; st.cx = st.cy = 0.5; applyZoom(cam); } return; }
+  var x0 = 1, y0 = 1, x1 = 0, y1 = 0;
+  ppl.forEach(function (d) { x0 = Math.min(x0, d.box[0]); y0 = Math.min(y0, d.box[1]); x1 = Math.max(x1, d.box[2]); y1 = Math.max(y1, d.box[3]); });
+  st.last = Date.now(); st.z = Math.max(1, Math.min(3, 0.65 / Math.max(x1 - x0, y1 - y0)));
+  st.cx = (x0 + x1) / 2; st.cy = (y0 + y1) / 2; applyZoom(cam);
+}
+
 // ---------- cards
 var grid = document.getElementById('grid'), focused = null;
 function setFocus(card) {
@@ -433,21 +573,44 @@ CAMS.forEach(function (c) {
     el('button', {'class': 'ib', title: 'Snapshot (saved on this PC)', text: '📷', onclick: function (e) { e.stopPropagation(); snap(n); }}),
     recBtn,
     has(c, 'listen') ? el('button', {'class': 'ib', title: 'Listen', text: '🔊', onclick: function (e) { e.stopPropagation(); listen(n, this); }}) : null,
+    el('button', {'class': 'ib' + (store(n + ':autozoom') === '1' ? ' on' : ''), title: 'Auto zoom on people (digital). Mouse wheel zooms, drag moves, double-click resets.', text: '🔍',
+      onclick: function (e) { e.stopPropagation(); var st = ZOOM[n]; st.auto = !st.auto; store(n + ':autozoom', st.auto ? '1' : '0'); this.classList.toggle('on', st.auto);
+        if (!st.auto) { st.z = 1; st.cx = st.cy = 0.5; applyZoom(n); } toast(title(n) + ': auto zoom ' + (st.auto ? 'on' : 'off'), 'ok'); }}),
     el('button', {'class': 'ib', title: 'Focus', text: '⛶', onclick: function (e) { e.stopPropagation(); setFocus(card); }})
   ]);
-  var vid = el('div', {'class': 'vid', onclick: function () { if (!card.classList.contains('editing')) setFocus(card); }}, [img,
+  var vid = el('div', {'class': 'vid', onclick: function () { if (card.dragMoved) { card.dragMoved = false; return; } if (!card.classList.contains('editing') && !card.classList.contains('zoomed')) setFocus(card); }}, [img,
     el('div', {'class': 'zones'}), el('div', {'class': 'ailayer'}),
     el('div', {'class': 'corner m-live'}, [el('span', {'class': 'pill'}, [el('span', {'class': 'dot'}), el('span', {'class': 'state', text: '...'})])]),
-    el('div', {'class': 'corner m-marks'}, [el('span', {'class': 'pill recpill', text: '● REC'}), el('span', {'class': 'pill motpill', text: '🏃 MOTION'})]),
+    el('div', {'class': 'corner m-marks'}, [el('span', {'class': 'pill recpill', text: '● REC'}), el('span', {'class': 'pill motpill', text: '🏃 MOTION'}), el('span', {'class': 'pill zoombadge', text: '🔍'})]),
     el('div', {'class': 'corner m-info'}, [el('span', {'class': 'pill infopill'})]),
-    el('div', {'class': 'ov', text: 'NO PICTURE'}), tools]);
+    el('div', {'class': 'ov', text: 'CONNECTING…'}), tools]);
   img.addEventListener('load', function () { layoutZones(card); });
   var panel = el('div', {'class': 'panel'});
   if (c.controls && has(c, 'ptz')) {
     panel.appendChild(el('div', {'class': 'ptzwrap'}, [ptzPad(n), el('div', {style: 'flex:1;min-width:200px'}, [
-      el('div', {'class': 'lbl', text: 'Favourite positions'}), el('div', {'class': 'chips', id: 'presets-' + n}),
-      el('button', {'class': 'btn', text: '＋ Save this position', onclick: function () { savePreset(n); }}),
-      el('div', {'class': 'hint', style: 'margin-top:6px', text: 'Hold an arrow to keep turning (arrow keys work when this camera is in focus). Aim, then save.'})])]));
+      el('div', {'class': 'lbl', text: 'Favourite positions'}), el('div', {'class': 'hint', id: 'restartwarn-' + n, hidden: 'hidden', style: 'color:var(--warn);margin:4px 0'}),
+      el('div', {'class': 'chips', id: 'presets-' + n}),
+      el('button', {'class': 'btn', text: '＋ Save this position', style: 'margin-right:6px', onclick: function () { savePreset(n); }}),
+      el('button', {'class': 'btn', id: 'lock-' + n, style: 'margin-right:6px', text: '🔓 Lock position',
+        title: 'Locked: only you move the camera (arrows, favourites). BigEye follow, the camera\'s own tracking and learning are blocked.',
+        onclick: function () { var on = !this.classList.contains('on');
+          json('/ptz/' + n + '/lock?on=' + (on ? 1 : 0)).then(function (s) { showLock(n, s.locked);
+            toast(title(n) + (s.locked ? ': locked, only you can move it now' : ': unlocked'), 'ok'); }); }}),
+      el('button', {'class': 'btn', style: 'margin-right:6px', text: '🎯 Calibrate', title: 'Same as the app: the camera turns to its end stops to find its zero (about a minute)',
+        onclick: function () { twoClick(this, function () { ctl(n, 'calibrate', 'calibrating, the camera turns for about a minute'); }); }}),
+      el('button', {'class': 'btn', id: 'autofix-' + n, style: 'margin-right:6px', text: '🧭 Auto-fix positions',
+        title: 'Finds the favourites again by their pictures (after the camera restarted or calibrated) and corrects them all. Takes up to a minute.',
+        onclick: function () { var b = this; twoClick(b, function () {
+          b.disabled = true; b.textContent = '🧭 Looking for the favourites...'; toast(title(n) + ': finding the favourites by their pictures (up to a minute)');
+          json('/ptz/' + n + '/autofix').then(function (r) {
+            if (r.ok) toast(title(n) + ': favourites fixed from "' + r.from + '" (moved pan ' + Math.round(r.shift.x * 100) + ' %, tilt ' + Math.round(r.shift.y * 100) + ' %)', 'ok');
+            else toast(title(n) + ': ' + r.error, 'bad');
+            json('/ptz/' + n + '/info').then(function (s) { renderPresets(n, s); });
+          }).catch(function () { toast(title(n) + ': auto-fix failed', 'bad'); }).then(function () { b.disabled = false; b.textContent = '🧭 Auto-fix positions'; });
+        }); }}),
+      el('button', {'class': 'btn', id: 'fix-' + n, disabled: 'disabled', text: '⟲ Fix all positions',
+        title: 'After the camera restarts, all favourites point a bit wrong. Click a favourite, aim with the arrows to where it should look, then press this (twice to confirm).', onclick: function () { twoClick(this, function () { fixAll(n); }); }}),
+      el('div', {'class': 'hint', style: 'margin-top:6px', text: 'Hold an arrow to keep turning (arrow keys work when this camera is in focus). Aim, then save. Favourites look wrong after the camera restarted? Click one, aim it right, press "Fix all".'})])]));
     panel.appendChild(row('Night mode', [choice(n, 'night', [{label: 'Auto', path: 'night?mode=auto', note: 'night mode auto'},
       {label: 'On', path: 'night?mode=on', note: 'night mode on'}, {label: 'Off', path: 'night?mode=off', note: 'night mode off'}])]));
     // BigEye's own follow: the AI sees the person, the page turns the camera (no green frame).
@@ -480,7 +643,7 @@ CAMS.forEach(function (c) {
     var cSl = slider('Contrast', 0, -100, function (v) { postJSON('/settings/' + n, {contrast: v}).then(function () { toast(title(n) + ': contrast ' + v + ' (picture back in 2-5 s)', 'ok'); }); });
     json('/settings/' + n).then(function (m) { bSl.setValue(m.picture.brightness); cSl.setValue(m.picture.contrast); });
     panel.appendChild(bSl); panel.appendChild(cSl);
-    json('/ptz/' + n + '/info').then(function (s) { renderPresets(n, s); showPos(n, s); });
+    json('/ptz/' + n + '/info').then(function (s) { renderPresets(n, s); showPos(n, s); showLock(n, s.locked); });
   } else if (c.controls) {
     var ir = choice(n, 'ir', [{label: 'On', path: 'ir?on=1', note: 'night vision on'}, {label: 'Off', path: 'ir?on=0', note: 'night vision off'}]);
     json('/irstate/' + n).then(function (s) { if (s.on !== undefined) { ir.set(s.on ? 'On' : 'Off'); store(n + ':ir', s.on ? 'On' : 'Off'); } }).catch(function () {});
@@ -498,10 +661,51 @@ CAMS.forEach(function (c) {
         fetch('/ctl/' + n + '/control/keyframe', {method: 'POST'}).then(function (r) { toast(title(n) + (r.ok ? ': fresh picture asked for' : ': failed'), r.ok ? 'ok' : 'bad'); }); }})]));
     if (has(c, 'pir')) panel.appendChild(sleepPanel(n));  // battery W2 model (window); the door camera does not answer it
   }
+  if (c.enhance) {
+    // BigEye picture help: done on this PC by the picture reader, not by the camera.
+    var post = function (obj, note) { return postJSON('/settings/' + n, obj).then(function () { toast(title(n) + ': ' + note + ' (picture back in 2-5 s)', 'ok'); return true; }); };
+    var fl = seg([{label: 'On', v: true}, {label: 'Off', v: false}], function (o) { return post({deflicker: o.v}, 'flicker fix ' + (o.v ? 'on' : 'off')); });
+    var dn = seg([{label: 'On', v: true}, {label: 'Off', v: false}], function (o) { return post({denoise: o.v}, 'noise reduction ' + (o.v ? 'on' : 'off')); });
+    var nb = seg([{label: 'Off', v: 0}, {label: 'Low', v: 1}, {label: 'High', v: 2}], function (o) { return post({night_boost: o.v}, 'night boost ' + o.label.toLowerCase()); });
+    var os = seg([{label: 'On', v: true}, {label: 'Off', v: false}], function (o) { return post({osd: o.v}, 'date/time stamp ' + (o.v ? 'on' : 'off')); });
+    json('/settings/' + n).then(function (m) { var e = m.enhance || {}; os.set(m.osd ? 'On' : 'Off'); fl.set(e.deflicker ? 'On' : 'Off'); dn.set(e.denoise ? 'On' : 'Off'); nb.set(['Off', 'Low', 'High'][e.night_boost || 0]); });
+    panel.appendChild(el('details', {}, [el('summary', {text: 'Picture help (BigEye)'}), el('div', {'class': 'panel', style: 'padding:0;margin-top:10px;gap:10px'}, [
+      row('Flicker fix', [fl, el('span', {'class': 'hint', text: 'smooths lamps pulsing on 50 Hz mains'})]),
+      row('Noise reduction', [dn]),
+      row('Night boost', [nb, el('span', {'class': 'hint', text: 'lifts dark areas; recordings and the AI see it too'})]),
+      row('Date/time stamp', [os, el('span', {'class': 'hint', text: "BigEye's own clock in the top-left corner (also in recordings)"})])])]));
+  }
+  // ---- automation (BigEye) and privacy masks
+  var autoPost = function (k, v, note) { var o = {auto: {}}; o.auto[k] = v; return postJSON('/settings/' + n, o).then(function () { toast(title(n) + ': ' + note, 'ok'); return true; }); };
+  var aRows = [];
+  if (c.controls && !has(c, 'ptz')) {
+    var an = seg([{label: 'On', v: true}, {label: 'Off', v: false}], function (o) { return autoPost('night', o.v, 'smart night ' + (o.v ? 'on (night vision follows sunset and sunrise)' : 'off')); });
+    aRows.push(row('Smart night', [an, el('span', {'class': 'hint', text: 'night vision on after sunset, off after sunrise'})])); aRows.an = an;
+  }
+  var aq = c.controls ? seg([{label: 'On', v: true}, {label: 'Off', v: false}], function (o) { return autoPost('quality', o.v, 'auto quality ' + (o.v ? 'on' : 'off')); }) : null;
+  if (aq) aRows.push(row('Auto quality', [aq, el('span', {'class': 'hint', text: 'low when the picture stutters, Full HD when steady'})]));
+  var at = seg([{label: 'On', v: true}, {label: 'Off', v: false}], function (o) { return autoPost('timelapse', o.v, 'timelapse ' + (o.v ? 'on: a video of the day is made after midnight' : 'off')); });
+  aRows.push(row('Timelapse', [at, el('span', {'class': 'hint', text: 'one picture every 30 s, a video per day (Videos\\Sentinel-BigEye\\timelapse)'})]));
+  if (c.enhance) {
+    var pmBtn = el('button', {'class': 'btn', text: 'Draw privacy masks', onclick: function () {
+      var on = !(card.classList.contains('editing') && card.editMode === 'privacy');
+      card.editMode = on ? 'privacy' : 'ignore'; card.classList.toggle('editing', on); pmBtn.classList.toggle('on', on);
+      pmBtn.textContent = on ? 'Done drawing' : 'Draw privacy masks'; layoutZones(card); drawZones(n);
+      if (on) toast('Drag on the picture to black out an area (neighbour window, a desk...). It is hidden in the live picture, recordings and the AI.');
+    }});
+    aRows.push(row('Privacy masks', [pmBtn, toolSeg(), el('button', {'class': 'btn', text: 'Clear', onclick: function () { postJSON('/settings/' + n, {privacy: []}).then(function (m) { MOTION[n] = m; drawZones(n); toast(title(n) + ': privacy masks removed', 'ok'); }); }}),
+      el('span', {'class': 'hint', id: 'pmcount-' + n})]));
+  }
+  json('/settings/' + n).then(function (m) { var a = m.auto || {};
+    if (aRows.an) aRows.an.set(a.night ? 'On' : 'Off'); if (aq) aq.set(a.quality ? 'On' : 'Off'); at.set(a.timelapse ? 'On' : 'Off');
+    var pc = document.getElementById('pmcount-' + n); if (pc) pc.textContent = (m.privacy || []).length ? (m.privacy.length + ' mask(s) active') : ''; });
+  panel.appendChild(el('details', {}, [el('summary', {text: 'Automation (BigEye)'}), el('div', {'class': 'panel', style: 'padding:0;margin-top:10px;gap:10px'}, aRows)]));
   var motionBox = el('div', {style: 'margin-top:10px'});
   panel.appendChild(el('details', {}, [el('summary', {text: 'Motion sensor (BigEye)'}), motionBox]));
   if (c.controls) panel.appendChild(el('details', {}, [el('summary', {text: 'More'}), el('div', {'class': 'row', style: 'margin-top:10px'},
     [!has(c, 'ptz') ? el('button', {'class': 'btn', text: 'Sync clock', title: 'Set the camera clock to this PC\'s time', onclick: function () { syncClock(n); }}) : null,
+     has(c, 'ptz') ? el('button', {'class': 'btn', text: '🎯 Calibrate pan/tilt', title: 'Same as the app: the camera turns to its end stops to find its zero (about 30-60 s)',
+       onclick: function () { twoClick(this, function () { ctl(n, 'calibrate', 'calibrating, the camera turns for about a minute'); }); }}) : null,
      has(c, 'ptz') ? el('button', {'class': 'btn', text: 'Swap left/right', onclick: function () { json('/ptz/' + n + '/invert?axis=pan').then(function (s) { toast('Left/right ' + (s.invert_pan ? 'swapped' : 'normal'), 'ok'); }); }}) : null,
      has(c, 'ptz') ? el('button', {'class': 'btn', text: 'Swap up/down', onclick: function () { json('/ptz/' + n + '/invert?axis=tilt').then(function (s) { toast('Up/down ' + (s.invert_tilt ? 'swapped' : 'normal'), 'ok'); }); }}) : null,
      el('button', {'class': 'btn danger', text: 'Restart camera', onclick: function () { reboot(n); }})])]));
@@ -515,10 +719,88 @@ CAMS.forEach(function (c) {
   card.meta = meta; card.recBtn = recBtn;
   motionBox.appendChild(motionPanel(c, card));
   grid.appendChild(card);
+  zoomSetup(n, card);
   liveLoop(n, img);
 });
 window.addEventListener('resize', function () { document.querySelectorAll('.card').forEach(layoutZones); });
 settingsPanel(); applyMarks();
+// ---------- usage meter + guard
+function bar(label, val, max, unit, warn, bad) {
+  var pct = Math.max(0, Math.min(100, 100 * val / (max || 1))), col = pct >= bad ? 'var(--bad)' : pct >= warn ? 'var(--warn)' : 'var(--ok)';
+  return el('div', {}, [el('div', {'class': 'row', style: 'justify-content:space-between'}, [el('span', {text: label}), el('span', {'class': 'hint', text: unit})]),
+    el('div', {'class': 'meter'}, [el('i', {style: 'width:' + pct + '%;background:' + col})])]);
+}
+function showUsage(u) {
+  if (!u || u.waiting) return;
+  var b = document.getElementById('usagebtn'), cores = u.cores || 1;
+  var mineCpu = u.bigeye_cpu / cores, gpuTxt = u.gpu && u.gpu.ok ? ' · GPU ' + (u.gpu.used_mb / 1024).toFixed(1) + '/' + Math.round(u.gpu.total_mb / 1024) + ' GB' : ' · GPU lost';
+  b.textContent = '📊 BigEye ' + mineCpu.toFixed(0) + ' %' + gpuTxt;
+  var worst = (u.problems || []).length ? 'bad' : (mineCpu > 15 || (u.gpu && u.gpu.ok && u.gpu.used_mb / u.gpu.total_mb > 0.85)) ? 'warn' : 'ok';
+  b.style.borderColor = worst === 'bad' ? 'var(--bad)' : worst === 'warn' ? 'var(--warn)' : 'var(--ok)';
+  var body = document.getElementById('usagebody'); body.innerHTML = ''; body.classList.remove('hint');
+  var m = u.machine || {};
+  body.appendChild(bar('Whole PC: processor', m.cpu, 100, Math.round(m.cpu) + ' % of ' + cores + ' cores (load ' + m.load + ')', 70, 90));
+  body.appendChild(bar('of which BigEye', mineCpu, 100, mineCpu.toFixed(1) + ' % of the PC (' + (u.bigeye_cpu / 100).toFixed(1) + ' cores)', 15, 40));
+  body.appendChild(bar('Memory (RAM)', m.ram_used_mb, m.ram_total_mb, (m.ram_used_mb / 1024).toFixed(1) + ' / ' + (m.ram_total_mb / 1024).toFixed(0) + ' GB', 80, 92));
+  if (u.gpu && u.gpu.ok) body.appendChild(bar('Graphics card memory', u.gpu.used_mb, u.gpu.total_mb, (u.gpu.used_mb / 1024).toFixed(1) + ' / ' + (u.gpu.total_mb / 1024).toFixed(0) + ' GB · load ' + u.gpu.util + ' % · ' + u.gpu.temp + ' °C', 85, 92));
+  else body.appendChild(el('div', {style: 'color:var(--bad)', text: '⚠ The graphics card is not reachable inside WSL. Fix: run "wsl --shutdown" in PowerShell, then open Ubuntu again.'}));
+  var parts = el('div', {'class': 'hint'});
+  Object.keys(u.bigeye || {}).forEach(function (k) { var v = u.bigeye[k];
+    parts.appendChild(el('div', {text: '• ' + k + ': ' + (v.cpu / 100).toFixed(2) + ' cores, ' + v.ram_mb + ' MB RAM'})); });
+  parts.appendChild(el('div', {text: '• AI runs on: ' + (u.ai_device || '?') + (u.ai_ms ? ' (' + u.ai_ms + ' ms per picture)' : '') + (u.ai_mode === 'cpu' ? ' · slowed down by the guard' : '')}));
+  (u.models || []).forEach(function (md) { parts.appendChild(el('div', {text: '• Loaded model: ' + md.key + ' (' + (md.size_mb / 1024).toFixed(1) + ' GB)'})); });
+  parts.appendChild(el('div', {text: '• Descriptions allowed now: ' + (u.vision_ok ? 'yes' : 'no (no room on the graphics card, or the brain is busy)')}));
+  body.appendChild(parts);
+  var acts = el('div', {});
+  acts.appendChild(el('b', {text: 'Guard: ' + ((u.problems || []).length ? 'acting on ' + u.problems.join(', ') : 'all quiet')}));
+  (u.actions || []).forEach(function (a) { acts.appendChild(el('div', {'class': 'hint', text: new Date(a.t * 1000).toLocaleTimeString().slice(0, 5) + ' — ' + a.what})); });
+  if (!(u.actions || []).length) acts.appendChild(el('div', {'class': 'hint', text: 'No actions needed so far.'}));
+  body.appendChild(acts);
+}
+function pollUsage() { json('/usage').then(showUsage).catch(function () {}); }
+setInterval(pollUsage, 5000); pollUsage();
+document.getElementById('usagebtn').addEventListener('click', function (e) { e.stopPropagation(); var p = document.getElementById('usagepanel'); p.hidden = !p.hidden; document.getElementById('settings').hidden = true; });
+document.getElementById('usagepanel').addEventListener('click', function (e) { e.stopPropagation(); });
+document.getElementById('usageclose').addEventListener('click', function () { document.getElementById('usagepanel').hidden = true; });
+document.addEventListener('keydown', function (e) { if (e.key === 'Escape') { document.getElementById('usagepanel').hidden = true; document.getElementById('settings').hidden = true; } });
+document.addEventListener('click', function () { document.getElementById('usagepanel').hidden = true; });
+// ---------- phone app: pairing + paired phones
+var IN_APP = /SentinelBigEyeApp/.test(navigator.userAgent);
+if (IN_APP) document.getElementById('phonebtn').remove();
+var PHONE_URL = '';
+function phonePanel() {
+  var body = document.getElementById('phonebody'); body.innerHTML = '';
+  var addr = PHONE_URL || 'http://<this PC>:8772';
+  var codeBox = el('div', {style: 'font:700 26px ui-monospace,monospace;letter-spacing:4px;text-align:center;padding:8px;border:1px dashed var(--line);border-radius:10px', text: '········'});
+  var codeHint = el('div', {'class': 'hint', text: 'Press "New code", then type it into the app. A code works once, for 10 minutes.'});
+  body.appendChild(el('div', {'class': 'hint'}, [
+    el('div', {text: '1. On the phone (home Wi-Fi or your VPN), open ' + addr + '/app/download and install the app.'}),
+    el('div', {text: '2. In the app: address ' + addr + ', then the code below.'}),
+    el('div', {text: 'Alerts: a person while Away, a camera gone for 10 minutes, and when the guard needs you.'})]));
+  body.appendChild(codeBox);
+  body.appendChild(el('div', {'class': 'row'}, [el('button', {'class': 'btn', text: 'New code', onclick: function () {
+    json('/app/pair-code').then(function (r) { codeBox.textContent = r.code;
+      codeHint.textContent = 'Valid for 10 minutes, once.' + (r.apk ? '' : ' (The app file is not built yet.)'); }); }}), codeHint]));
+  var list = el('div', {});
+  body.appendChild(el('b', {text: 'Paired phones'})); body.appendChild(list);
+  json('/app/devices').then(function (ds) {
+    if (!ds.length) list.appendChild(el('div', {'class': 'hint', text: 'None yet.'}));
+    ds.forEach(function (d) {
+      var rm = el('button', {'class': 'btn', text: 'Remove', style: 'padding:2px 9px'});
+      rm.addEventListener('click', function () { twoClick(rm, function () { json('/app/devices?remove=' + encodeURIComponent(d.id)).then(phonePanel); }); });
+      list.appendChild(el('div', {'class': 'row', style: 'justify-content:space-between'}, [
+        el('span', {text: d.name + ' · last seen ' + new Date(d.last_seen * 1000).toLocaleString().slice(0, 17)}), rm]));
+    });
+  });
+}
+if (!IN_APP) {
+  document.getElementById('phonebtn').addEventListener('click', function (e) { e.stopPropagation(); var p = document.getElementById('phonepanel');
+    p.hidden = !p.hidden; if (!p.hidden) json('/app/info').then(function (r) { PHONE_URL = r.address || ''; phonePanel(); }).catch(phonePanel); document.getElementById('usagepanel').hidden = true; document.getElementById('settings').hidden = true; });
+}
+document.getElementById('phonepanel').addEventListener('click', function (e) { e.stopPropagation(); });
+document.getElementById('phoneclose').addEventListener('click', function () { document.getElementById('phonepanel').hidden = true; });
+document.addEventListener('keydown', function (e) { if (e.key === 'Escape') document.getElementById('phonepanel').hidden = true; });
+document.addEventListener('click', function () { document.getElementById('phonepanel').hidden = true; });
 function loadFaces() {
   json('/faces').then(function (f) {
     var box = document.getElementById('faces'); box.innerHTML = '';
@@ -561,6 +843,12 @@ document.getElementById('fixall').addEventListener('click', function () { reconn
 function showAutofix(s) { var b = document.getElementById('autofix'); b.classList.toggle('on', s.on); b.textContent = 'Auto-fix ' + (s.on ? 'on' : 'off'); }
 json('/autofix').then(showAutofix).catch(function () {});
 var HOME = false;
+function showAutoHome(s) { var b = document.getElementById('autohome'); b.classList.toggle('on', s.on); b.textContent = s.on ? 'Auto ✓' : 'Auto'; }
+json('/autohome').then(showAutoHome).catch(function () {});
+document.getElementById('autohome').addEventListener('click', function () {
+  json('/autohome', {method: 'POST'}).then(function (s) { showAutoHome(s); toast(s.on ? 'Home/Away now switches by itself (known face = Home, nobody for ' + s.away_after_min + ' min after the door = Away)' : 'Home/Away back to manual', 'ok'); });
+});
+setInterval(function () { json('/home').then(showHome).catch(function () {}); }, 15000);
 function showHome(s) { HOME = s.home; document.querySelectorAll('#homeseg button').forEach(function (b) { b.classList.toggle('on', (b.dataset.h === '1') === s.home); }); }
 json('/home').then(showHome).catch(function () {});
 document.querySelectorAll('#homeseg button').forEach(function (b) {
@@ -612,8 +900,9 @@ function poll() {
         card.meter.firstChild.style.width = (s.motion ? Math.min(100, s.motion.level) : 0) + '%';
         card.meter.classList.toggle('hot', !!(s.motion && s.motion.active));
       }
-      card.querySelector('.state').textContent = live ? 'LIVE' : (s.age < 0 ? 'no picture yet' : 'no picture ' + Math.round(s.age) + ' s');
-      card.querySelector('.ov').textContent = s.age < 0 ? 'NO PICTURE' : 'NO PICTURE FOR ' + Math.round(s.age) + ' S';
+      var offline = s.age < 0 && s.reachable === false;
+      card.querySelector('.state').textContent = live ? 'LIVE' : offline ? 'offline' : (s.age < 0 ? 'connecting' : 'no picture ' + Math.round(s.age) + ' s');
+      card.querySelector('.ov').textContent = offline ? 'CAMERA OFFLINE' : s.age < 0 ? 'CONNECTING…' : 'NO PICTURE FOR ' + Math.round(s.age) + ' S · RECONNECTING';
       var m = [];
       if (s.battery !== undefined && s.battery !== null) m.push((s.charging ? '⚡ ' : '🔋 ') + s.battery + '%');
       if (s.media) m.push(s.media);
@@ -624,6 +913,9 @@ function poll() {
       card.querySelector('.infopill').textContent = hasBattery && s.battery !== undefined && s.battery !== null ? (s.charging ? '⚡ ' : '🔋 ') + s.battery + '%' : '';
       if (s.ptz) showPos(n, s.ptz);
       var fs = document.getElementById('follow-' + n); if (fs) fs.textContent = s.follow ? '● ' + s.follow : '';
+      var rw = document.getElementById('restartwarn-' + n);
+      if (rw && s.ptz) { rw.hidden = !s.ptz.restarted; if (s.ptz.restarted) rw.textContent = '⚠ The camera restarted at ' + new Date(s.ptz.restarted * 1000).toLocaleTimeString().slice(0, 5) + ': favourites may point wrong. Press 🧭 Auto-fix positions.'; }
+      autoZoom(n, s.ai && s.ai.found);
       var layer = card.querySelector('.ailayer'); layer.innerHTML = '';
       ((s.ai && s.ai.found) || []).forEach(function (d) {
         var b = d.box;
@@ -642,14 +934,37 @@ function strip(id, url, render) {
     list.slice(0, 30).forEach(function (x) { box.appendChild(render(x)); });
   }).catch(function () { document.getElementById(id).hidden = true; });
 }
-function motionEvents() {
-  strip('mv', '/events', function (e) {
-    var pic = '/saved/' + e.picture.split('/').map(encodeURIComponent).join('/');
-    return el('div', {'class': 'ev'}, [el('a', {href: pic, target: '_blank'}, [el('img', {src: pic, loading: 'lazy'})]),
-      el('div', {}, [el('b', {text: title(e.cam) + (e.label ? ' · ' + e.label : '')}), el('span', {text: ' · ' + new Date(e.time * 1000).toLocaleString()}),
-        e.clip ? el('a', {href: '/saved/' + e.clip.split('/').map(encodeURIComponent).join('/'), target: '_blank', text: ' · clip'}) : null])]);
-  });
+var SEARCHING = false;
+function eventCard(e) {
+  var pic = '/saved/' + e.picture.split('/').map(encodeURIComponent).join('/');
+  return el('div', {'class': 'ev'}, [el('a', {href: pic, target: '_blank'}, [el('img', {src: pic, loading: 'lazy'})]),
+    el('div', {}, [el('b', {text: title(e.cam) + (e.label ? ' · ' + e.label : '')}), el('span', {text: ' · ' + new Date(e.time * 1000).toLocaleString()}),
+      e.clip ? el('a', {href: '/saved/' + e.clip.split('/').map(encodeURIComponent).join('/'), target: '_blank', text: ' · clip'}) : null,
+      e.desc ? el('div', {'class': 'desc', text: e.desc, title: e.desc}) : null])]);
 }
+function motionEvents() {
+  if (SEARCHING) return;
+  strip('mv', '/events', eventCard);
+}
+var searchTimer = null;
+document.getElementById('evsearch').addEventListener('input', function () {
+  var q = this.value.trim(); clearTimeout(searchTimer);
+  searchTimer = setTimeout(function () {
+    if (!q) { SEARCHING = false; motionEvents(); return; }
+    SEARCHING = true;
+    json('/search?q=' + encodeURIComponent(q)).then(function (list) {
+      var box = document.getElementById('mvlist'); box.innerHTML = '';
+      if (!list.length) box.appendChild(el('span', {'class': 'hint', text: 'Nothing found (events get their description a few seconds after they happen).'}));
+      list.forEach(function (e) { box.appendChild(eventCard(e)); });
+    });
+  }, 400);
+});
+document.getElementById('storybtn').addEventListener('click', function () {
+  var b = this, box = document.getElementById('storybox'); b.disabled = true; b.textContent = '📝 Writing...';
+  json('/story').then(function (r) { box.hidden = false; box.textContent = r.text || r.error; })
+    .catch(function () { box.hidden = false; box.textContent = 'The story could not be written right now.'; })
+    .then(function () { b.disabled = false; b.textContent = "📝 Today's story"; });
+});
 function frigateEvents() {
   strip('ev', '/frigate/api/events?limit=20', function (e) {
     var base = '/frigate/api/events/' + e.id, score = e.data && e.data.top_score ? Math.round(e.data.top_score * 100) + '%' : '';

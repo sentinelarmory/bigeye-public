@@ -24,7 +24,7 @@ MODEL = os.path.expanduser(os.environ.get("BIGEYE_MODEL", "~/.local/share/sentin
 ADDR = ("127.0.0.1", int(os.environ.get("BIGEYE_AI_PORT", "8771")))
 SIZE = 640
 # COCO class ids we care about (others are ignored).
-WANTED = {0: "person", 15: "cat", 16: "dog", 14: "bird", 2: "car"}
+WANTED = {0: "person", 15: "cat", 16: "dog", 14: "bird", 2: "car", 62: "tv", 63: "laptop"}  # tv/laptop: people on screens are not people
 MIN_SCORE = 0.35
 FACES_FILE = os.path.expanduser("~/.config/sentinel-bigeye/faces.json")  # name -> list of face fingerprints
 FACE_MATCH = 0.40      # cosine similarity needed to call a face by name (ArcFace: 0.4 is a common cut)
@@ -162,8 +162,15 @@ def detect(jpeg, min_score=MIN_SCORE):
     found = []
     for c in set(cls.tolist()):
         idx = np.where(cls == c)[0]
+        kept = []
         for k in nms(boxes[idx], score[idx]):
             b = boxes[idx[k]]
+            # A box lying mostly inside a bigger, surer box of the same kind is the same thing
+            # (half body inside full body): drop it, so one person gets one box and one name.
+            area = max(1e-9, (b[2] - b[0]) * (b[3] - b[1]))
+            if any(max(0, min(b[2], o[2]) - max(b[0], o[0])) * max(0, min(b[3], o[3]) - max(b[1], o[1])) / area > 0.65 for o in kept):
+                continue
+            kept.append(b)
             found.append({"label": WANTED[c], "score": round(float(score[idx[k]]), 3),
                           "box": [round(float(min(max(b[0] / w, 0), 1)), 4), round(float(min(max(b[1] / h, 0), 1)), 4),
                                   round(float(min(max(b[2] / w, 0), 1)), 4), round(float(min(max(b[3] / h, 0), 1)), 4)]})

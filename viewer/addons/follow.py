@@ -135,6 +135,13 @@ class Addon:
             if c.get("mode", "off") == "off" or self.busy.get(name):
                 st["follow"] = None
                 continue
+            if getattr(self.ctx, "locked", lambda n: False)(name):  # position locked: only the owner moves it
+                st["follow"] = "off (position locked)"
+                continue
+            if getattr(self.ctx, "manual", lambda n: False)(name):  # the owner steers by hand: keep still
+                st["follow"] = "paused while you steer"
+                last_seen = time.time()
+                continue
             ai = st.get("ai") or {}
             if ai.get("down") or time.time() - ai.get("t", 0) > 2 or self.ctx.quiet(name):
                 continue

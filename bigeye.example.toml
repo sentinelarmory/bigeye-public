@@ -36,3 +36,14 @@ seed_presets = []                              # e.g. [{ name = "sofa", x = 0.48
 
 [windows]
 explorer = "/mnt/c/Windows/explorer.exe"       # WSL only: the folder buttons open Windows Explorer
+
+[location]
+# Where the home is, for smart night (night vision on after sunset, off after sunrise).
+# Leave it out and night is 19:00 to 07:00. Keep this file private: it says where you live.
+# lat = 52.0
+# lon = 5.0
+
+[app]
+# The address your phone uses to reach BigEye's phone-app listener (--app-port 8772),
+# shown on the page when you pair a phone. Your PC's LAN address, or its VPN address.
+# phone_url = "http://192.168.1.20:8772"

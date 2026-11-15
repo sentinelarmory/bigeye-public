@@ -1,0 +1,199 @@
+{
+  "captured_at": "2026-11-15T22:39:53Z",
+  "period": "today (local midnight to captured_at)",
+  "attempts_today": 33464,
+  "attempts_last_hour": 1978,
+  "picture_uploads": 378,
+  "picture_upload_bytes": 10183284,
+  "person_reports": 156,
+  "per_camera": {
+    "cam360": 30564,
+    "door": 2800,
+    "window": 100
+  },
+  "per_kind": [
+    {
+      "kind": "P2P server (China/abroad)",
+      "attempts": 26000,
+      "by_camera": {
+        "cam360": 26000
+      },
+      "what_it_does": "Says hello to the peer-to-peer servers that let the app (and the vendor) reach the camera from anywhere."
+    },
+    {
+      "kind": "Keep-alive",
+      "attempts": 3384,
+      "by_camera": {
+        "cam360": 3384
+      },
+      "what_it_does": "Keeps a permanent line open to the cloud so it can be reached and told what to do."
+    },
+    {
+      "kind": "Door/window cloud",
+      "attempts": 2900,
+      "by_camera": {
+        "door": 2800,
+        "window": 100
+      },
+      "what_it_does": "The door or window camera calls its own cloud (iWFCam) to say where it is."
+    },
+    {
+      "kind": "Picture upload",
+      "attempts": 378,
+      "by_camera": {
+        "cam360": 378
+      },
+      "what_it_does": "Sends a picture from your room to its cloud storage (Alibaba OSS). Caught and kept on PC2."
+    },
+    {
+      "kind": "Motion report",
+      "attempts": 377,
+      "by_camera": {
+        "cam360": 377
+      },
+      "what_it_does": "Tells the cloud it saw movement or a person, with time and picture name."
+    },
+    {
+      "kind": "Looks up a server",
+      "attempts": 264,
+      "by_camera": {
+        "cam360": 264
+      },
+      "what_it_does": "Asks for the address of one of its cloud servers."
+    },
+    {
+      "kind": "Firmware / remote log check",
+      "attempts": 100,
+      "by_camera": {
+        "cam360": 100
+      },
+      "what_it_does": "Asks for remote logging settings and firmware updates (a way to change the camera from afar)."
+    },
+    {
+      "kind": "Sign-in / status",
+      "attempts": 21,
+      "by_camera": {
+        "cam360": 21
+      },
+      "what_it_does": "Signs in to its cloud, reports that it is bound to your account and its on/off switch."
+    },
+    {
+      "kind": "Viewing report",
+      "attempts": 13,
+      "by_camera": {
+        "cam360": 13
+      },
+      "what_it_does": "Reports when and how long someone watched the live picture."
+    },
+    {
+      "kind": "Time and region",
+      "attempts": 13,
+      "by_camera": {
+        "cam360": 13
+      },
+      "what_it_does": "Asks the cloud for the time, time zone and which server region to use."
+    },
+    {
+      "kind": "Other",
+      "attempts": 7,
+      "by_camera": {
+        "cam360": 7
+      },
+      "what_it_does": "Other contact."
+    },
+    {
+      "kind": "Asks for upload keys",
+      "attempts": 5,
+      "by_camera": {
+        "cam360": 5
+      },
+      "what_it_does": "Asks the cloud for storage keys so it can upload pictures and video."
+    },
+    {
+      "kind": "Sends its access password",
+      "attempts": 2,
+      "by_camera": {
+        "cam360": 2
+      },
+      "what_it_does": "Sends the new password for live video it makes at every start. Whoever has it can watch."
+    }
+  ],
+  "per_10_minutes": {
+    "start": "2026-11-15T10:40:00Z",
+    "slot_seconds": 600,
+    "counts": [
+      123,
+      24,
+      1048,
+      540,
+      34,
+      136,
+      533,
+      40,
+      58,
+      28,
+      636,
+      24,
+      34,
+      52,
+      522,
+      124,
+      24,
+      30,
+      1052,
+      524,
+      122,
+      38,
+      542,
+      56,
+      30,
+      132,
+      36,
+      522,
+      42,
+      26,
+      120,
+      544,
+      46,
+      59,
+      30,
+      1143,
+      546,
+      22,
+      24,
+      538,
+      126,
+      44,
+      44,
+      538,
+      50,
+      138,
+      26,
+      522,
+      30,
+      60,
+      134,
+      540,
+      544,
+      538,
+      56,
+      26,
+      622,
+      26,
+      26,
+      42,
+      535,
+      132,
+      22,
+      28,
+      530,
+      42,
+      124,
+      30,
+      1128,
+      526,
+      48,
+      122
+    ]
+  }
+}

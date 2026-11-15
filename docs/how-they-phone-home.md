@@ -1,16 +1,19 @@
 # How cheap cameras phone home
 
-What one home's three cameras tried to do on one morning (2026-11-14, local midnight to 11:52), counted by
+What one home's three cameras tried to do in one day (2026-11-15, local midnight to 23:38), counted by
 BigEye's stand-in clouds. Nothing of it left the house.
 
 <p align="center"><img src="../media/kinds.png" alt="What they try to do, by kind and camera" width="100%"></p>
 
 | | |
 |---|---|
-| Attempts to call home | **17,077**, about one every 2.5 seconds |
-| From the 360 camera | 92 % |
-| Pictures it tried to upload | 160 (3.2 MB), with people in them |
-| "Person seen" reports | 76 |
+| Attempts to call home | **33,464**, about one every 2.5 seconds |
+| From the 360 camera | 91 % (door 8 %, window 100 attempts after it came online late in the evening) |
+| Pictures it tried to upload | 378 (9.9 MB), with people in them |
+| "Person seen" reports | 156 |
+
+The first morning we counted (2026-11-14, to 11:52) gave the same rate: 17,077 attempts. This is what the
+cameras do all the time, not a burst. Raw numbers: [`../data/`](../data/).
 
 ## The pattern
 

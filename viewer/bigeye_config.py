@@ -38,6 +38,8 @@ DEFAULTS = {
     "cameras": {},
     "ptz": {"seed_presets": []},
     "windows": {"explorer": "/mnt/c/Windows/explorer.exe"},
+    # The phone app: the address the phone uses for this PC's app listener (--app-port), shown when pairing.
+    "app": {"phone_url": ""},
 }
 
 

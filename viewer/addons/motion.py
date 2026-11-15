@@ -33,7 +33,17 @@ def needed_share(sensitivity):
 def zone_mask(zones):
     """True where motion is ignored. zones = [[x0, y0, x1, y1], ...] as 0..1 of the picture."""
     mask = np.zeros((H, W), dtype=bool)
+    polys = [z["poly"] for z in zones or [] if isinstance(z, dict) and z.get("poly")]
+    if polys:  # free-hand zones
+        from PIL import Image, ImageDraw
+        im = Image.new("1", (W, H), 0)
+        for poly in polys:
+            if len(poly) >= 3:
+                ImageDraw.Draw(im).polygon([(float(x) * W, float(y) * H) for x, y in poly], fill=1)
+        mask |= np.asarray(im, dtype=bool)
     for z in zones or []:
+        if isinstance(z, dict):
+            continue
         try:
             x0, y0, x1, y1 = (float(v) for v in z)
         except (TypeError, ValueError):
