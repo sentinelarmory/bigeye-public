@@ -67,6 +67,7 @@ class Addon:
     def _watch(self, name):
         cam, last, down_since = self.ctx.cams[name], 0.0, None
         named = []  # [{"box", "name", "t"}]: people recognised lately, so the name follows them
+        statics = []  # [{"label", "box", "first", "seen", "best"}]: unsure finds that never move (shoes "cat")
         while True:
             slow = self.ctx.page_settings().get("ai_mode") == "cpu" if hasattr(self.ctx, "page_settings") else False
             time.sleep(INTERVAL * 4 if slow else INTERVAL)  # guard's slow mode: fewer pictures, no faces
@@ -100,7 +101,8 @@ class Addon:
                 cx, cy = (box[0] + box[2]) / 2, (box[1] + box[3]) / 2
                 return any(s[0] - 0.02 <= cx <= s[2] + 0.02 and s[1] - 0.02 <= cy <= s[3] + 0.02 for s in screens)
             status["screens"] = len(screens)
-            kept = [d for d in found if d.get("label") not in ("tv", "laptop")
+            people_only = cfg.get("look_for") == "people"  # e.g. door and window: only people matter there
+            kept = [d for d in found if d.get("label") not in ("tv", "laptop") and (not people_only or d.get("label") == "person")
                     and d.get("score", 0) >= MIN_SCORE.get(d.get("label"), 0.6)
                     and not in_zone(d["box"], zones) and not on_screen(d["box"])]
             now = time.time()
@@ -136,6 +138,25 @@ class Addon:
             if dropped:
                 kept = [d for d in kept if d not in dropped]
                 status["doubles"] = status.get("doubles", 0) + len(dropped)
+            # Things that never move (shoes on a table called "cat", a coat called "person") are muted: after 90 s in
+            # the same spot when the AI is unsure (< 0.7), after 3 minutes whatever the score. Any movement unmutes it,
+            # so a real arrival is never hidden; a cat that sleeps without moving drops off the picture after 3 minutes.
+            statics = [x for x in statics if now - x["seen"] < 30]
+            muted = []
+            for d in kept:
+                if d["label"] not in ("cat", "dog", "person", "bird"):
+                    continue
+                m = max(statics, key=lambda x: iou(x["box"], d["box"]) if x["label"] == d["label"] else 0, default=None)
+                if m and m["label"] == d["label"] and iou(m["box"], d["box"]) > 0.7:
+                    m["seen"], m["best"] = now, max(m["best"], d.get("score", 0))
+                    still = now - m["first"]
+                    if (still > 90 and m["best"] < 0.7) or still > 180:
+                        muted.append(d)
+                else:
+                    statics.append({"label": d["label"], "box": d["box"], "first": now, "seen": now, "best": d.get("score", 0)})
+            if muted:
+                kept = [d for d in kept if d not in muted]
+            status["static_muted"] = len(muted)
             status["ai"] = {"t": round(now, 1), "found": kept}
             wanted = WANTS.get(cfg.get("record_on", "person"), set())
             hits = [d for d in kept if d["label"] in wanted]

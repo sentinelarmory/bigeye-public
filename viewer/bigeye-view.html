@@ -430,16 +430,19 @@ function motionPanel(c, card) {
   var recSeg = seg([{label: 'Record', v: true}, {label: 'Don\'t record', v: false}], function (o) { return saveMotion(cam, {record: o.v}); });
   var REC_ON = [{label: '🧍 Person', v: 'person'}, {label: '🧍🐈 Person or animal', v: 'person_animal'}, {label: '🐈 Animal', v: 'animal'}, {label: 'Any movement', v: 'motion'}];
   var whenSeg = seg(REC_ON, function (o) { return saveMotion(cam, {record_on: o.v}).then(function (ok) { if (ok) toast(title(cam) + ': records when it sees ' + o.label.replace(/^\S+ /, '').toLowerCase(), 'ok'); return ok; }); });
+  var lookSeg = seg([{label: 'People and animals', v: 'all'}, {label: 'People only', v: 'people'}], function (o) {
+    return saveMotion(cam, {look_for: o.v}).then(function (ok) { if (ok) toast(title(cam) + ': the AI looks for ' + o.label.toLowerCase(), 'ok'); return ok; }); });
   var knownSeg = seg([{label: 'Don\'t record them', v: true}, {label: 'Record them too', v: false}], function (o) { return saveMotion(cam, {skip_known: o.v}); });
   var phone = seg([{label: 'Phone message', v: true}, {label: 'No message', v: false}], function (o) { return saveMotion(cam, {notify: o.v}); });
   json('/settings/' + cam).then(function (m) {
     MOTION[cam] = m; onoff.set(m.on ? 'On' : 'Off'); sens.setValue(m.sens);
     whenSeg.set(REC_ON.filter(function (o) { return o.v === m.record_on; })[0].label);
+    lookSeg.set(m.look_for === 'people' ? 'People only' : 'People and animals');
     recSeg.set(m.record === false ? 'Don\'t record' : 'Record'); knownSeg.set(m.skip_known === false ? 'Record them too' : 'Don\'t record them'); phone.set(m.notify ? 'Phone message' : 'No message'); drawZones(cam);
   });
   zoneEditor(cam, card);
   return el('div', {'class': 'panel', style: 'padding:0;gap:10px'}, [
-    row('Motion sensor', [onoff, meter]), row('Record when', [whenSeg]),
+    row('Motion sensor', [onoff, meter]), row('AI looks for', [lookSeg]), row('Record when', [whenSeg]),
     el('div', {'class': 'hint', text: 'Movement wakes it up; the AI (on this PC) checks what it is. A person on the TV counts too: draw an ignore zone over the TV.'}), sens,
     row('Ignore zones', [drawBtn, toolSeg(), el('button', {'class': 'btn', text: 'Clear all', onclick: function () {
       if (confirm('Remove all ignore zones on ' + cam + '?')) saveMotion(cam, {zones: []}); }}), el('span', {'class': 'hint zonecount'})]),

@@ -1265,6 +1265,8 @@ class Handler(BaseHTTPRequestHandler):
                 m["skip_known"] = bool(body["skip_known"])
             if body.get("record_on") in ("motion", "person", "person_animal", "animal"):
                 m["record_on"] = body["record_on"]
+            if body.get("look_for") in ("people", "all"):
+                m["look_for"] = body["look_for"]
             if "sens" in body:
                 m["sens"] = max(1, min(100, int(body["sens"])))
             if isinstance(body.get("auto"), dict):
@@ -1298,7 +1300,7 @@ class Handler(BaseHTTPRequestHandler):
                 CAMS[name].eq = (pic["brightness"], pic["contrast"])
                 CAMS[name].restart_reader()
             save_settings()
-        self._json(dict(m, record_on=m.get("record_on", "person"), ai=m.get("ai", True), skip_known=m.get("skip_known", True),
+        self._json(dict(m, record_on=m.get("record_on", "person"), look_for=m.get("look_for", "all"), ai=m.get("ai", True), skip_known=m.get("skip_known", True),
                         picture=settings(name).get("picture", {"brightness": 0, "contrast": 0}),
                         enhance=settings(name).get("enhance", {}), auto=settings(name).get("auto", {}),
                         privacy=settings(name).get("privacy", []), osd=settings(name).get("osd", False)))
