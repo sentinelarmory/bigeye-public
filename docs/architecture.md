@@ -30,8 +30,10 @@ under `/ctl/<cam>/…` with an allow-list.
 
 ## AI service (bigeye-ai.py, :8771)
 
-- YOLO11s ONNX (exported once with ultralytics in a throw-away venv), onnxruntime-gpu
-  CUDA; letterbox 640, NMS; classes person/cat/dog/bird/car
+- a list of ONNX detectors tried in order (`BIGEYE_MODELS`, default RF-DETR Small, Apache-2.0, then YOLO11s,
+  AGPL-3.0, as an optional fallback), onnxruntime-gpu CUDA; classes person/cat/dog/bird/car/tv/laptop
+- failover: a model that errors, loses the GPU or is slower than 200 ms (median of 20) is swapped at once;
+  the first is tried again every 10 minutes; `/status` lists the order and the last switches
 - `?faces=1`: InsightFace buffalo_l (det 320 + ArcFace) on the upper 65 % of each person
   box; cosine ≥ 0.40 against `faces.json`
 - `/enroll?name=` needs exactly one person with a clear face

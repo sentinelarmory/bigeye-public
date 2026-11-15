@@ -55,14 +55,22 @@ If both roles are one box, skip this. Otherwise forward the bridge ports, for ex
 uv venv -p 3.12 ~/.local/share/sentinel-bigeye/ai-venv
 uv pip install -p ~/.local/share/sentinel-bigeye/ai-venv/bin/python "onnxruntime-gpu[cuda,cudnn]" numpy pillow insightface opencv-python-headless
 uv pip uninstall -p ~/.local/share/sentinel-bigeye/ai-venv/bin/python onnxruntime   # insightface pulls the CPU build; keep only the GPU one
-# Export YOLO11 once in a throw-away venv (AGPL-3.0; the weights stay on your machine):
+# Export the detector(s) once in a throw-away venv; the weights stay on your machine.
 uv venv -p 3.12 /tmp/export && uv pip install -p /tmp/export/bin/python --index-url https://download.pytorch.org/whl/cpu torch torchvision \
-  && uv pip install -p /tmp/export/bin/python ultralytics onnx onnxslim
-mkdir -p ~/.local/share/sentinel-bigeye/models && cd ~/.local/share/sentinel-bigeye/models \
+  && uv pip install -p /tmp/export/bin/python rfdetr onnx onnxsim
+mkdir -p ~/.local/share/sentinel-bigeye/models && cd ~/.local/share/sentinel-bigeye/models
+# RF-DETR Small (Apache-2.0), the default detector:
+/tmp/export/bin/python -c "from rfdetr import RFDETRSmall; RFDETRSmall().export(output_dir='.')"
+# Optional fallback, YOLO11s (AGPL-3.0):
+uv pip install -p /tmp/export/bin/python ultralytics onnxslim \
   && /tmp/export/bin/python -c "from ultralytics import YOLO; YOLO('yolo11s.pt').export(format='onnx', imgsz=640, simplify=True)"
 ```
 
-Start `systemd/bigeye-ai.service`. **Check:** `curl http://127.0.0.1:8771/status` says `"device": "GPU"` (or CPU).
+The detectors are tried in the order of `BIGEYE_MODELS` (default `rfdetr-small.onnx,yolo11s.onnx`); a missing file
+is skipped. Leave YOLO11 out for a setup with no AGPL parts in the detector.
+
+Start `systemd/bigeye-ai.service`. **Check:** `curl http://127.0.0.1:8771/status` shows the model in use, its
+`"device": "GPU"` (or CPU) and the order (`"chain"`).
 
 ## 7. The page (main machine)
 

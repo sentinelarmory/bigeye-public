@@ -199,6 +199,8 @@ class Addon:
                         "load": round(os.getloadavg()[0], 1)},
             "gpu": g, "bigeye": mine, "bigeye_cpu": round(bigeye_cpu, 1),
             "models": models, "ai_device": ai.get("device"), "ai_ms": ai.get("last_ms"),
+            "ai_model": ai.get("kind") or ai.get("model"), "ai_licence": ai.get("licence"),
+            "ai_chain": [c.get("kind") or c.get("name") for c in ai.get("chain", [])], "ai_switches": ai.get("switches", [])[:5],
             "ai_mode": page.get("ai_mode", "normal"), "vision_ok": bool(vision_ok),
             "problems": problems, "actions": list(self.actions)[:10],
         }

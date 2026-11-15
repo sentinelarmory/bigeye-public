@@ -48,7 +48,9 @@ main.focus .card:not(.big) .panel{display:none}
 .aibox.cat,.aibox.dog{border-color:var(--warn)}.aibox.cat span,.aibox.dog span{background:var(--warn)}
 .title{display:flex;align-items:center;gap:10px;padding:10px 14px;border-top:1px solid var(--line)}
 .title b{font-size:15px;text-transform:capitalize}.title .meta{color:var(--dim);font-size:12px;margin-left:auto}
-.panel{padding:4px 14px 14px;display:grid;gap:12px}
+.panel{padding:4px 14px 14px;display:grid;gap:12px}.card.folded .panel{display:none}
+.title .tb{background:none;border:1px solid var(--line);color:var(--dim);border-radius:7px;padding:2px 8px;font:inherit;font-size:13px;cursor:pointer}.title .tb:hover{color:var(--txt)}
+.title b{cursor:pointer}@media (max-width:700px){header{position:static}}
 .row{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
 .lbl{color:var(--dim);font-size:12px;min-width:92px}
 .btn{background:var(--card2);color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:7px 12px;cursor:pointer;font:inherit}
@@ -93,6 +95,7 @@ section.strip{padding:6px 16px 16px}section.strip h2{font-size:14px;color:var(--
 <button class="btn" id="autofix" title="Restart a camera's link by itself after 90 s without picture (at most every 10 min)">Auto-fix</button>
 <button class="btn" id="usagebtn" title="What BigEye uses of this PC, and what the guard does">📊 …</button>
 <button class="btn" id="phonebtn" title="Pair the Sentinel-BigEye app on your phone">📱 Phone app</button>
+<button class="btn" id="foldall" title="Fold or unfold the settings under every camera (remembered on this device)">▤ Settings</button>
 <button class="btn" id="gear" title="Where the marks and buttons sit on the picture">⚙ Display</button>
 <button class="btn" id="fs" title="Full screen (F)">Full screen</button></header>
 <div id="usagepanel" hidden style="position:fixed;right:16px;top:58px;z-index:8;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px;box-shadow:0 10px 30px rgba(0,0,0,.5);width:min(460px,calc(100vw - 32px));display:grid;gap:10px">
@@ -562,7 +565,7 @@ function setFocus(card) {
   grid.classList.toggle('focus', !!on);
   focused = on ? card : null;
   if (on) { card.classList.add('big'); grid.prepend(card); }
-  else CAMS.forEach(function (c) { grid.appendChild(document.getElementById('card-' + c.name)); });
+  else orderedCams().forEach(function (c) { grid.appendChild(document.getElementById('card-' + c.name)); });
   setTimeout(function () { document.querySelectorAll('.card').forEach(layoutZones); }, 50);
 }
 CAMS.forEach(function (c) {
@@ -714,9 +717,13 @@ CAMS.forEach(function (c) {
       onclick: function () { reboot(n); }}) : null,
     el('button', {'class': 'btn', text: '🔄 Reconnect link', title: 'Restarts only the link to this camera on the camera machine', onclick: function () { reconnect(n, this); }})]), panel.lastChild);
   var meta = el('span', {'class': 'meta'});
-  card = el('div', {'class': 'card', id: 'card-' + n}, [vid, el('div', {'class': 'title'}, [el('b', {text: n}), meta]), panel,
+  var foldBtn = el('button', {'class': 'tb', title: 'Fold or unfold this camera\'s settings', onclick: function (e) { e.stopPropagation(); setFold(n, !document.getElementById('card-' + n).classList.contains('folded')); }});
+  var tools2 = el('span', {style: 'display:flex;gap:6px'}, [
+    el('button', {'class': 'tb', text: '◀', title: 'Move this camera earlier', onclick: function (e) { e.stopPropagation(); moveCam(n, -1); }}),
+    el('button', {'class': 'tb', text: '▶', title: 'Move this camera later', onclick: function (e) { e.stopPropagation(); moveCam(n, 1); }}), foldBtn]);
+  card = el('div', {'class': 'card', id: 'card-' + n}, [vid, el('div', {'class': 'title'}, [el('b', {text: n, title: 'Fold or unfold the settings', onclick: function () { foldBtn.click(); }}), meta, tools2]), panel,
     has(c, 'listen') ? el('audio', {id: 'a-' + n, preload: 'none'}) : null]);
-  card.meta = meta; card.recBtn = recBtn;
+  card.meta = meta; card.recBtn = recBtn; card.foldBtn = foldBtn;
   motionBox.appendChild(motionPanel(c, card));
   grid.appendChild(card);
   zoomSetup(n, card);
@@ -724,6 +731,31 @@ CAMS.forEach(function (c) {
 });
 window.addEventListener('resize', function () { document.querySelectorAll('.card').forEach(layoutZones); });
 settingsPanel(); applyMarks();
+// ---------- fold settings and camera order (remembered on this device: browser or phone app)
+function orderedCams() {
+  var order = []; try { order = JSON.parse(store('order') || '[]'); } catch (e) { order = []; }
+  return CAMS.slice().sort(function (a, b) {
+    var ia = order.indexOf(a.name), ib = order.indexOf(b.name);
+    return (ia < 0 ? 99 + CAMS.indexOf(a) : ia) - (ib < 0 ? 99 + CAMS.indexOf(b) : ib); });
+}
+function applyOrder() { if (!focused) orderedCams().forEach(function (c) { grid.appendChild(document.getElementById('card-' + c.name)); });
+  setTimeout(function () { document.querySelectorAll('.card').forEach(layoutZones); }, 50); }
+function moveCam(n, step) {
+  var names = orderedCams().map(function (c) { return c.name; }), i = names.indexOf(n), j = i + step;
+  if (j < 0 || j >= names.length) return;
+  names.splice(i, 1); names.splice(j, 0, n); store('order', JSON.stringify(names)); applyOrder();
+}
+function setFold(n, on) {
+  var card = document.getElementById('card-' + n); card.classList.toggle('folded', on);
+  card.foldBtn.textContent = on ? '▸ Settings' : '▾ Settings'; store('fold:' + n, on ? '1' : '0');
+  setTimeout(function () { layoutZones(card); }, 50);
+}
+CAMS.forEach(function (c) { setFold(c.name, store('fold:' + c.name) === '1'); });
+applyOrder();
+document.getElementById('foldall').addEventListener('click', function () {
+  var anyOpen = CAMS.some(function (c) { return !document.getElementById('card-' + c.name).classList.contains('folded'); });
+  CAMS.forEach(function (c) { setFold(c.name, anyOpen); });
+});
 // ---------- usage meter + guard
 function bar(label, val, max, unit, warn, bad) {
   var pct = Math.max(0, Math.min(100, 100 * val / (max || 1))), col = pct >= bad ? 'var(--bad)' : pct >= warn ? 'var(--warn)' : 'var(--ok)';
@@ -748,6 +780,8 @@ function showUsage(u) {
   Object.keys(u.bigeye || {}).forEach(function (k) { var v = u.bigeye[k];
     parts.appendChild(el('div', {text: '• ' + k + ': ' + (v.cpu / 100).toFixed(2) + ' cores, ' + v.ram_mb + ' MB RAM'})); });
   parts.appendChild(el('div', {text: '• AI runs on: ' + (u.ai_device || '?') + (u.ai_ms ? ' (' + u.ai_ms + ' ms per picture)' : '') + (u.ai_mode === 'cpu' ? ' · slowed down by the guard' : '')}));
+  if (u.ai_model) parts.appendChild(el('div', {text: '• Detector: ' + u.ai_model + (u.ai_licence ? ' (' + u.ai_licence + ')' : '') + ((u.ai_chain || []).length > 1 ? ' · order: ' + u.ai_chain.join(' → ') : '')}));
+  (u.ai_switches || []).forEach(function (sw) { parts.appendChild(el('div', {text: '   ' + new Date(sw.t * 1000).toLocaleTimeString().slice(0, 5) + ' ' + sw.from.replace('.onnx', '') + ' → ' + sw.to.replace('.onnx', '') + ': ' + sw.why})); });
   (u.models || []).forEach(function (md) { parts.appendChild(el('div', {text: '• Loaded model: ' + md.key + ' (' + (md.size_mb / 1024).toFixed(1) + ' GB)'})); });
   parts.appendChild(el('div', {text: '• Descriptions allowed now: ' + (u.vision_ok ? 'yes' : 'no (no room on the graphics card, or the brain is busy)')}));
   body.appendChild(parts);

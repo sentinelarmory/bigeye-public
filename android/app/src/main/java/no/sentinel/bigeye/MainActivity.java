@@ -16,7 +16,9 @@ import android.text.InputType;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.WindowInsets;
 import android.webkit.CookieManager;
+import android.widget.FrameLayout;
 import android.webkit.WebResourceError;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebResourceResponse;
@@ -71,6 +73,34 @@ public class MainActivity extends Activity {
     }
 
     @Override
+    protected void onPause() {
+        super.onPause();
+        CookieManager.getInstance().flush();  // keep the login; the page's own settings live in its local storage
+    }
+
+    /** Android 15 draws apps under the status bar and the navigation buttons: keep the content between them. */
+    private void show(View content) {
+        if (content.getParent() instanceof ViewGroup) ((ViewGroup) content.getParent()).removeView(content);
+        FrameLayout root = new FrameLayout(this);
+        root.setBackgroundColor(BG);
+        root.addView(content, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        root.setOnApplyWindowInsetsListener((v, insets) -> {
+            int l, t, r, b;
+            if (Build.VERSION.SDK_INT >= 30) {
+                android.graphics.Insets bars = insets.getInsets(WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout() | WindowInsets.Type.ime());
+                l = bars.left; t = bars.top; r = bars.right; b = bars.bottom;
+            } else {
+                l = insets.getSystemWindowInsetLeft(); t = insets.getSystemWindowInsetTop();
+                r = insets.getSystemWindowInsetRight(); b = insets.getSystemWindowInsetBottom();
+            }
+            v.setPadding(l, t, r, b);
+            return insets;
+        });
+        setContentView(root);
+        root.requestApplyInsets();
+    }
+
+    @Override
     public void onBackPressed() {
         if (web != null && web.canGoBack()) web.goBack(); else super.onBackPressed();
     }
@@ -103,7 +133,7 @@ public class MainActivity extends Activity {
                 }
             });
         }
-        setContentView(web);
+        show(web);
         String body = "key=" + enc(prefs.key());
         web.postUrl(prefs.url() + "/app/login", body.getBytes(StandardCharsets.UTF_8));
     }
@@ -114,7 +144,7 @@ public class MainActivity extends Activity {
         box.addView(text("The phone must be on the home Wi-Fi, or have the your VPN on.\n\nAddress: " + prefs.url(), 15, DIM, false));
         box.addView(button("Try again", v -> showPage()));
         box.addView(button("Pair again / change address", v -> showSetup(null)));
-        setContentView(wrap(box));
+        show(wrap(box));
     }
 
     // ------------------------------------------------------------------ pairing
@@ -167,7 +197,7 @@ public class MainActivity extends Activity {
         box.addView(status);
         box.addView(text("Alerts come only when they need you: a person while you are Away, a camera gone for "
                 + "10 minutes, or BigEye asking for help. They work at home and through the your VPN.", 13, DIM, false));
-        setContentView(wrap(box));
+        show(wrap(box));
     }
 
     private String pair(String base, String code) throws Exception {

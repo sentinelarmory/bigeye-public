@@ -20,7 +20,7 @@ the cameras make to reach their vendor.
 | | |
 |---|---|
 | 🧭 **Fits your setup?** | [Is this for you](#is-this-for-you) |
-| ⚡ **Install** | [docs/setup.md](docs/setup.md), step by step, with a check after each step |
+| ⚡ **Install** | `./install.sh --dry-run all` to see the steps, then `./install.sh all` (or `main` / `camera`); details in [docs/setup.md](docs/setup.md) |
 | 🔍 **What it found** | [How they phone home](docs/how-they-phone-home.md): three cameras, 33,000+ attempts in one day |
 | 🗺️ **Status** | [Honest status](#honest-status) |
 
@@ -48,7 +48,8 @@ the cameras make to reach their vendor.
 |---|---|
 | **Live view** | all cameras on one page; one request per picture, so buttons never wait behind video |
 | **Record** | snapshots and H.264 MP4 on your own disk; motion clips start 3 s before the alarm |
-| **Motion + AI** | a light motion sensor wakes a YOLO11 detector: person, cat, dog; ignore zones (per 360 position) |
+| **Motion + AI** | a light motion sensor wakes the detector: person, cat, dog; ignore zones (per 360 position) |
+| **Detector failover** | a list of detectors tried in order (default RF-DETR, Apache-2.0, then optional YOLO11): a model that fails, slows down or loses the GPU is swapped at once, and the first is tried again every 10 minutes |
 | **Faces and pets** | known faces get their name and are not recorded; strangers are; your cat gets its name |
 | **360 control** | absolute positions (save any spot), real night mode, quality, BigEye follow that learns your mounting |
 | **Self-healing** | auto-reconnect after 90 s without picture, "Reconnect cameras", Home / Away |
@@ -87,11 +88,13 @@ The camera machine and the main machine can be the same box. Details: [docs/arch
 
 ## Cameras
 
-| Camera | Status |
-|---|---|
-| 360 pan/tilt camera (tested: ZAS-Q01) | ✅ video, PTZ, night, quality, tracking, call-home stand-in |
-| Door camera, H.264 (tested: JT-B9 type) | 🔧 bridge being rewritten for this repo ([why](bridges/iwfcam/README.md)) |
-| W2 battery camera, MJPEG | 🔧 same bridge |
+| Camera | Protocol | Status |
+|---|---|---|
+| **Tested:** 360 pan/tilt camera ZAS-Q01 | CS2 PPCS P2P over UDP | ✅ video (H.265), PTZ with absolute positions, night, quality, tracking, call-home stand-in |
+| **Tested:** door camera JT-B9 type | `1TEG`/`2TEG` LAN protocol, H.264 | 🔧 new bridge written from our own protocol notes, in testing ([why](bridges/iwfcam/README.md)) |
+| **Tested:** W2 battery camera | `1TEG`/`2TEG` LAN protocol, MJPEG 640x480 | 🔧 same new bridge: first live test passed (13 fps, battery read-out) |
+| **Likely similar** | other cameras whose UID looks like `ABCD-123456-EFGHI` and that answer CS2 P2P on UDP 32100, or cameras that answer `1TEG` discovery on UDP 10104 | ❓ worth a try; please report |
+| **Unknown** | Tuya / Smart Life, Hikvision/EZVIZ, Reolink, TP-Link Tapo and other families | ⚪ different protocols, not supported (many of these have their own RTSP option) |
 
 The vendors' "4K" labels did not hold on the tested units: the real streams top out at 1920x1080.
 
@@ -103,15 +106,16 @@ The vendors' "4K" labels did not hold on the tested units: the real streams top 
 | 🟡 **New** | the Android app (pairing, page and alert long-poll tested; first real-phone run in progress) |
 | 🔧 **In progress** | a new door/window bridge written from our own protocol notes |
 | ⚪ **Limits** | the stand-ins need one relay run (door/window) or the camera's ID (360) to answer; the 360 must be paired once with the vendor app; after a factory reset a door/window camera gets a new LAN token (see the bridge notes) |
-| 🔜 **Next** | one-command installer, Home Assistant events |
+| 🔜 **Next** | the new door/window bridge in this repo, Home Assistant events |
 
 ## License and credits
 
 BigEye is licensed under the **GNU AGPL-3.0** ([LICENSE](LICENSE)): use it, change it, share it; if you run a changed
-version as a service, share your changes too.
+version as a service, share your changes too. Contributions: see [CONTRIBUTING.md](CONTRIBUTING.md).
 
-- Detection: [Ultralytics YOLO11](https://github.com/ultralytics/ultralytics) (AGPL-3.0). Export the model yourself
-  (see setup); the weights are not in this repo.
+- Detection: [RF-DETR](https://github.com/roboflow/rf-detr) by Roboflow (Apache-2.0, the default) and, optionally,
+  [Ultralytics YOLO11](https://github.com/ultralytics/ultralytics) (AGPL-3.0) as a fallback. Export the models
+  yourself (see setup); no weights are in this repo.
 - Faces: [InsightFace](https://github.com/deepinsight/insightface) `buffalo_l`, downloaded at first use;
   **its pretrained models are for non-commercial research use only.**
 - 360 camera command ids: the public notes in [jphein/eyeplus-icam365-camera](https://github.com/jphein/eyeplus-icam365-camera)
