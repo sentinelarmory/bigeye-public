@@ -1133,6 +1133,9 @@ class Handler(BaseHTTPRequestHandler):
             time.sleep(1.5)
             with urllib.request.urlopen(f"{base}/control/state", timeout=3) as r:
                 cfg = json.load(r).get("sleep_config")
+            if cfg:  # the new bridge (bigeye-doorbridge) names two flags differently
+                cfg.setdefault("no_sleep_on_power", cfg.get("no_sleep_on_charger"))
+                cfg.setdefault("lan_wakeup", cfg.get("wake_from_lan"))
             return self._json(cfg or {"error": "camera did not answer"}, 200 if cfg else 502)
         except Exception as error:
             return self._json({"error": str(error)}, 502)
