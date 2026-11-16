@@ -66,6 +66,7 @@ the cameras make to reach their vendor.
 | **Narrator** *(optional)* | a small local vision model in [LM Studio](https://lmstudio.ai) writes one line per event; search events by meaning and get a written story of the day |
 | **Automation** | night vision by sunrise/sunset, auto quality, auto Home/Away, a daily timelapse |
 | **Guard** | a usage meter on the page; unloads models, slows or restarts the AI when the machine struggles, and tells you what it did |
+| **Old phones as cameras** *(Android 5+)* | the small BigEye Cam app turns a spare phone into a camera: picture, battery and light, no cloud; the camera machine passes the picture on ([android-cam/](android-cam/)) |
 | **Phone app** *(Android)* | the same page in an app, plus alerts only when they need you; paired with a one-time code, no cloud push ([docs/phone-app.md](docs/phone-app.md)) |
 | **MCP server** | AI agents can look at the cameras, events and day story; the few tools that change anything say so ([mcp/](mcp/)) |
 
@@ -101,6 +102,7 @@ The camera machine and the main machine can be the same box. Details: [docs/arch
 | **Tested:** 360 pan/tilt camera ZAS-Q01 | CS2 PPCS P2P over UDP | ✅ video (H.265), PTZ with absolute positions, night, quality, tracking, call-home stand-in |
 | **Tested:** door camera JT-B9 type | `1TEG`/`2TEG` LAN protocol, H.264 | ✅ video (1080p) with key-frame replay for late viewers, controls, battery; our own clean-room bridge ([bridges/doorbridge](bridges/doorbridge/), [how it was written](bridges/doorbridge/PROVENANCE.md)) |
 | **Tested:** W2 battery camera | `1TEG`/`2TEG` LAN protocol, MJPEG 640x480 | ✅ same bridge: MJPEG, controls, battery and sleep settings; 640x480 is the camera's own limit (it accepts higher sizes but keeps sending 640x480); battery % and voltage logged every minute |
+| **Tested:** old Android phones (Samsung Galaxy J3 2016 on Android 5.1, Galaxy A15 on Android 16) | BigEye Cam app, MJPEG over HTTP | ✅ live picture, battery and light; 1280x720 on the A15, 800x480 at 6-8 fps on the old J3 |
 | **Likely similar** | other cameras whose UID looks like `ABCD-123456-EFGHI` and that answer CS2 P2P on UDP 32100, or cameras that answer `1TEG` discovery on UDP 10104 | ❓ worth a try; please report |
 | **Unknown** | Tuya / Smart Life, Hikvision/EZVIZ, Reolink, TP-Link Tapo and other families | ⚪ different protocols, not supported (many of these have their own RTSP option) |
 
