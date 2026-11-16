@@ -16,7 +16,7 @@ main.focus{grid-template-columns:minmax(0,3fr) minmax(0,1fr);align-items:start}
 main.focus .card:not(.big){grid-column:2}main.focus .card.big{grid-column:1;grid-row:1/span 9}
 main.focus .card:not(.big) .panel{display:none}
 .card{background:var(--card);border:1px solid var(--line);border-radius:12px;overflow:hidden;display:flex;flex-direction:column}
-.vid{position:relative;overflow:hidden;background:#000;aspect-ratio:16/9;cursor:zoom-in;user-select:none}.big .vid{cursor:zoom-out}
+.vid{position:relative;overflow:hidden;background:#000;aspect-ratio:16/9;max-height:85vh;margin:0 auto;cursor:zoom-in;user-select:none}.big .vid{cursor:zoom-out}
 .vid img{width:100%;height:100%;object-fit:contain;display:block;-webkit-user-drag:none}
 .stale .vid img{opacity:.25;filter:grayscale(1)}
 .corner{position:absolute;display:flex;gap:6px;align-items:center;font-size:12px;font-weight:600;z-index:2}
@@ -598,7 +598,13 @@ CAMS.forEach(function (c) {
     el('div', {'class': 'corner m-marks'}, [el('span', {'class': 'pill recpill', text: '● REC'}), el('span', {'class': 'pill motpill', text: '🏃 MOTION'}), el('span', {'class': 'pill zoombadge', text: '🔍'})]),
     el('div', {'class': 'corner m-info'}, [el('span', {'class': 'pill infopill'})]),
     el('div', {'class': 'ov', text: 'CONNECTING…'}), tools]);
-  img.addEventListener('load', function () { layoutZones(card); });
+  img.addEventListener('load', function () {
+    // A camera standing on end (a phone on its side, turned 90 deg): give it a tall box so it fills the card
+    // instead of thin black bars. The box keeps the picture's own shape, so boxes and zones still line up.
+    var box = img.parentNode, w = img.naturalWidth, h = img.naturalHeight;
+    if (box && w && h) { var tall = h > w; if (box.dataset.tall !== String(tall)) { box.dataset.tall = String(tall); box.style.aspectRatio = tall ? (w + ' / ' + h) : ''; } }
+    layoutZones(card);
+  });
   var panel = el('div', {'class': 'panel'});
   if (c.controls && has(c, 'ptz')) {
     panel.appendChild(el('div', {'class': 'ptzwrap'}, [ptzPad(n), el('div', {style: 'flex:1;min-width:200px'}, [
