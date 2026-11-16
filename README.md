@@ -55,7 +55,7 @@ the cameras make to reach their vendor.
 | | |
 |---|---|
 | **Live view** | all cameras on one page; one request per picture, so buttons never wait behind video |
-| **Record** | snapshots and H.264 MP4 on your own disk; motion clips start 3 s before the alarm |
+| **Record** | snapshots and H.264 MP4 on your own disk (encoded by the graphics card when there is one); motion clips start 3 s before the alarm; per camera "record on any movement" and "keep recording in Home mode" for outdoor cameras |
 | **Motion + AI** | a light motion sensor wakes the detector: person, cat, dog; ignore zones (per 360 position) |
 | **Detector failover** | a list of detectors tried in order (default RF-DETR, Apache-2.0, then optional YOLO11): a model that fails, slows down or loses the GPU is swapped at once, and the first is tried again every 10 minutes |
 | **Faces and pets** | known faces get their name and are not recorded; strangers are, and their faces are grouped by person so you can name a regular visitor with one click (kept on your machine, dropped after 30 days unseen); your cat gets its name |
