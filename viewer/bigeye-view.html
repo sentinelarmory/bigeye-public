@@ -142,7 +142,10 @@ function toast(text, kind) {
   setTimeout(function () { t.remove(); }, 4600);
 }
 function store(key, val) { try { if (val === undefined) return localStorage.getItem(key); localStorage.setItem(key, val); } catch (e) { return null; } }
-function title(cam) { return cam.charAt(0).toUpperCase() + cam.slice(1); }
+function title(cam) {
+  var c = (typeof CAMS !== 'undefined' ? CAMS : []).filter(function (x) { return x.name === cam; })[0];
+  return (c && c.label) || cam.charAt(0).toUpperCase() + cam.slice(1);
+}
 function has(c, f) { return c.features.indexOf(f) >= 0; }
 function ctl(cam, path, note) {
   return fetch('/ctl/' + cam + '/' + path).then(function (r) {
@@ -720,6 +723,19 @@ CAMS.forEach(function (c) {
   panel.appendChild(el('details', {}, [el('summary', {text: 'Automation (BigEye)'}), el('div', {'class': 'panel', style: 'padding:0;margin-top:10px;gap:10px'}, aRows)]));
   var motionBox = el('div', {style: 'margin-top:10px'});
   panel.appendChild(el('details', {}, [el('summary', {text: 'Motion sensor (BigEye)'}), motionBox]));
+  // ---- the name shown on the page, in the picture's clock and in alerts (settings stay with the camera)
+  var nameIn = el('input', {'class': 'btn', value: title(n), maxlength: 24, style: 'flex:1;min-width:140px', 'aria-label': 'Camera name'});
+  var nameSave = el('button', {'class': 'btn', text: 'Save name', onclick: function () {
+    var v = nameIn.value.trim();
+    postJSON('/settings/' + n, {label: v}).then(function () {
+      CAMS.forEach(function (x) { if (x.name === n) x.label = v || null; });
+      var b = document.querySelector('#card-' + n + ' .title b'); if (b) b.textContent = title(n);
+      toast('Camera is now called ' + title(n), 'ok');
+    });
+  }});
+  nameIn.addEventListener('keydown', function (e) { if (e.key === 'Enter') nameSave.click(); });
+  panel.appendChild(el('details', {}, [el('summary', {text: 'Name'}), el('div', {'class': 'row', style: 'margin-top:10px'},
+    [nameIn, nameSave, el('span', {'class': 'hint', text: 'shown on the page and in the clock; recordings and settings stay as they are'})])]));
   if (c.controls) panel.appendChild(el('details', {}, [el('summary', {text: 'More'}), el('div', {'class': 'row', style: 'margin-top:10px'},
     [!has(c, 'ptz') ? el('button', {'class': 'btn', text: 'Sync clock', title: 'Set the camera clock to this PC\'s time', onclick: function () { syncClock(n); }}) : null,
      has(c, 'ptz') ? el('button', {'class': 'btn', text: '🎯 Calibrate pan/tilt', title: 'Same as the app: the camera turns to its end stops to find its zero (about 30-60 s)',
@@ -736,7 +752,7 @@ CAMS.forEach(function (c) {
   var tools2 = el('span', {style: 'display:flex;gap:6px'}, [
     el('button', {'class': 'tb', text: '◀', title: 'Move this camera earlier', onclick: function (e) { e.stopPropagation(); moveCam(n, -1); }}),
     el('button', {'class': 'tb', text: '▶', title: 'Move this camera later', onclick: function (e) { e.stopPropagation(); moveCam(n, 1); }}), foldBtn]);
-  card = el('div', {'class': 'card', id: 'card-' + n}, [vid, el('div', {'class': 'title'}, [el('b', {text: n, title: 'Fold or unfold the settings', onclick: function () { foldBtn.click(); }}), meta, tools2]), panel,
+  card = el('div', {'class': 'card', id: 'card-' + n}, [vid, el('div', {'class': 'title'}, [el('b', {text: title(n), title: 'Fold or unfold the settings', onclick: function () { foldBtn.click(); }}), meta, tools2]), panel,
     has(c, 'listen') ? el('audio', {id: 'a-' + n, preload: 'none'}) : null]);
   card.meta = meta; card.recBtn = recBtn; card.foldBtn = foldBtn;
   motionBox.appendChild(motionPanel(c, card));

@@ -148,7 +148,7 @@ class Camera:
             post = []
             if self.osd:
                 post.append("drawtext=fontfile=" + OSD_FONT + ":text='%{localtime\\:%Y-%m-%d %H\\\\\\:%M\\\\\\:%S}  "
-                            + self.name.capitalize() + "':x=w-tw-16:y=16:fontsize=h/32:fontcolor=white:borderw=2:bordercolor=black@0.8")
+                            + cam_label(self.name).replace("'", "").replace(":", "").replace("\\", "") + "':x=w-tw-16:y=16:fontsize=h/32:fontcolor=white:borderw=2:bordercolor=black@0.8")
             if polys:  # free-hand privacy masks: a picture with black shapes laid over the video
                 mask = privacy_mask_png(self.name, polys)
                 graph = (",".join(filters) + "[pre];" if filters else "[in]null[pre];") + \
@@ -280,6 +280,11 @@ MOTION_PREROLL = 3
 # Where a camera burns its own clock into the picture (fractions x, y, w, h), so BigEye can blur it away and show its
 # own clock top-left instead. bigeye.toml [cameras.<name>] clock_box = [x, y, w, h] overrides.
 CLOCK_BOX = {"cam360": (0.735, 0.03, 0.26, 0.075)}
+
+
+def cam_label(name):
+    """The name the owner gave the camera on the page (settings keep the internal name, so nothing is lost)."""
+    return (SETTINGS.get(name, {}) or {}).get("label") or name.capitalize()
 
 
 def clock_box(name):
@@ -1401,6 +1406,13 @@ class Handler(BaseHTTPRequestHandler):
                 settings(name)["osd"] = bool(body["osd"])
                 CAMS[name].osd = bool(body["osd"])
                 CAMS[name].restart_reader()
+            if isinstance(body.get("label"), str):   # the name shown on the page, in the clock and in alerts
+                label = " ".join(body["label"].split())[:24]
+                if label:
+                    settings(name)["label"] = label
+                else:
+                    settings(name).pop("label", None)
+                CAMS[name].restart_reader()       # the clock in the picture shows the name too
             if "rotate" in body or "mirror" in body:   # BigEye turns the picture itself: works for every camera
                 o = settings(name).setdefault("orient", {"rotate": 0, "mirror": False})
                 if body.get("rotate") in (0, 90, 180, 270):
@@ -1540,7 +1552,7 @@ class Handler(BaseHTTPRequestHandler):
         if path == "":
             config = [{"name": n, "controls": n in CONTROLS, "features": sorted(FEATURES.get(n, ())),
                        # picture help needs the ffmpeg reader (not the MJPEG pass-through)
-                       "enhance": not CAMS[n].passthrough(), "clock": bool(clock_box(n))}
+                       "enhance": not CAMS[n].passthrough(), "clock": bool(clock_box(n)), "label": cam_label(n)}
                       for n in CAMS]
             with open(PAGE_FILE, encoding="utf-8") as handle:
                 page = handle.read()
