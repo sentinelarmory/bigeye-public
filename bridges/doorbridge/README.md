@@ -112,4 +112,4 @@ may be decimal or `0x` hex.
 
 ## License
 
-AGPL-3.0 (repository license).
+PolyForm Noncommercial 1.0.0 (repository licence; commercial use: see COMMERCIAL.md in the repository root).
