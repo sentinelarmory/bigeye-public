@@ -302,4 +302,4 @@ A tiny HTML page linking the endpoints (no external resources).
   reassembly (incl. JPEG trimming and Annex-B start), ACK/NAK packet building, IMA ADPCM decode against a known
   vector, µ-law conversion, status/media/sleep parsing, back-off timing.
 - A `README.md`: what it is, flags, endpoints, how to build and run, and that it is written from this spec.
-- License header not needed per file; the repo is AGPL-3.0.
+- License header not needed per file; the repo licence (PolyForm Noncommercial 1.0.0) covers it.

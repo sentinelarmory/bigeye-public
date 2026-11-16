@@ -21,17 +21,17 @@ own LAN protocol, and nothing that phones home.
 
 ## Licence of your contribution (please read)
 
-BigEye is licensed under the **GNU AGPL-3.0**. By submitting a contribution (code, docs, graphics or data) you
-agree that:
+BigEye is licensed under the **PolyForm Noncommercial License 1.0.0** (free for non-commercial use; commercial use
+needs a licence, see COMMERCIAL.md). By submitting a contribution (code, docs, graphics or data) you agree that:
 
 1. you wrote it yourself, or have the right to submit it, and it is not copied from code you may not share;
-2. it is licensed to everyone under the AGPL-3.0, like the rest of BigEye; **and**
+2. it is licensed to everyone under the same terms as the rest of BigEye; **and**
 3. you also grant the BigEye maintainers (Sentinel Armory) a perpetual, worldwide, royalty-free, irrevocable
    licence to use, change and distribute your contribution under other licence terms as well, including
    permissive or commercial ones.
 
-Point 3 lets the project offer BigEye under other terms later (for example to a company that cannot use the
-AGPL) without having to track down every contributor. You keep the copyright in your contribution and can use
+Point 3 lets the project sell commercial licences for BigEye, contributions included, without having to track
+down every contributor. You keep the copyright in your contribution and can use
 it however you like.
 
 Please add a sign-off line to each commit (`git commit -s`), which confirms the above:

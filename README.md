@@ -7,7 +7,7 @@
   <img alt="Python 3.11+" src="https://img.shields.io/badge/Python-3.11%2B-3776AB?style=for-the-badge&logo=python&logoColor=white">
   <img alt="NVIDIA optional" src="https://img.shields.io/badge/GPU-optional-76B900?style=for-the-badge&logo=nvidia&logoColor=white">
   <img alt="No cloud" src="https://img.shields.io/badge/to%20the%20cloud-0%20bytes-00d4ff?style=for-the-badge">
-  <img alt="License: AGPL-3.0" src="https://img.shields.io/badge/License-AGPL--3.0-d9aa55?style=for-the-badge">
+  <img alt="License: PolyForm Noncommercial (commercial licence available)" src="https://img.shields.io/badge/License-PolyForm%20Noncommercial-d9aa55?style=for-the-badge">
 </p>
 
 <p align="center">
@@ -118,8 +118,9 @@ The vendors' "4K" labels did not hold on the tested units: the real streams top 
 
 ## License and credits
 
-BigEye is licensed under the **GNU AGPL-3.0** ([LICENSE](LICENSE)): use it, change it, share it; if you run a changed
-version as a service, share your changes too. Contributions: see [CONTRIBUTING.md](CONTRIBUTING.md).
+BigEye is **free for non-commercial use** under the [PolyForm Noncommercial License 1.0.0](LICENSE): use it, change it,
+share it. **Commercial use** (selling it or something built on it, a paid service, use in a business) needs a
+commercial licence: see [COMMERCIAL.md](COMMERCIAL.md). Contributions: see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 - Detection: [RF-DETR](https://github.com/roboflow/rf-detr) by Roboflow (Apache-2.0, the default) and, optionally,
   [Ultralytics YOLO11](https://github.com/ultralytics/ultralytics) (AGPL-3.0) as a fallback. Export the models
