@@ -679,12 +679,14 @@ CAMS.forEach(function (c) {
     var dn = seg([{label: 'On', v: true}, {label: 'Off', v: false}], function (o) { return post({denoise: o.v}, 'noise reduction ' + (o.v ? 'on' : 'off')); });
     var nb = seg([{label: 'Off', v: 0}, {label: 'Low', v: 1}, {label: 'High', v: 2}], function (o) { return post({night_boost: o.v}, 'night boost ' + o.label.toLowerCase()); });
     var os = seg([{label: 'On', v: true}, {label: 'Off', v: false}], function (o) { return post({osd: o.v}, 'date/time stamp ' + (o.v ? 'on' : 'off')); });
-    json('/settings/' + n).then(function (m) { var e = m.enhance || {}; os.set(m.osd ? 'On' : 'Off'); fl.set(e.deflicker ? 'On' : 'Off'); dn.set(e.denoise ? 'On' : 'Off'); nb.set(['Off', 'Low', 'High'][e.night_boost || 0]); });
+    var hc = seg([{label: 'Show', v: false}, {label: 'Blur it', v: true}], function (o) { return post({hide_clock: o.v}, "camera's own clock " + (o.v ? 'blurred' : 'shown')); });
+    json('/settings/' + n).then(function (m) { var e = m.enhance || {}; os.set(m.osd ? 'On' : 'Off'); hc.set(e.hide_clock ? 'Blur it' : 'Show'); fl.set(e.deflicker ? 'On' : 'Off'); dn.set(e.denoise ? 'On' : 'Off'); nb.set(['Off', 'Low', 'High'][e.night_boost || 0]); });
     panel.appendChild(el('details', {}, [el('summary', {text: 'Picture help (BigEye)'}), el('div', {'class': 'panel', style: 'padding:0;margin-top:10px;gap:10px'}, [
       row('Flicker fix', [fl, el('span', {'class': 'hint', text: 'smooths lamps pulsing on 50 Hz mains'})]),
       row('Noise reduction', [dn]),
       row('Night boost', [nb, el('span', {'class': 'hint', text: 'lifts dark areas; recordings and the AI see it too'})]),
-      row('Date/time stamp', [os, el('span', {'class': 'hint', text: "BigEye's own clock in the top-left corner (also in recordings)"})])])]));
+      row('Date/time stamp', [os, el('span', {'class': 'hint', text: "BigEye's own clock in the top-left corner (also in recordings)"})])]
+      .concat(c.clock ? [row("Camera's own clock", [hc, el('span', {'class': 'hint', text: 'blur the clock the camera burns in (top right); use the stamp above instead'})])] : []))]));
   }
   // ---- automation (BigEye) and privacy masks
   var autoPost = function (k, v, note) { var o = {auto: {}}; o.auto[k] = v; return postJSON('/settings/' + n, o).then(function () { toast(title(n) + ': ' + note, 'ok'); return true; }); };

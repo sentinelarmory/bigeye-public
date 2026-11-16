@@ -127,6 +127,11 @@ class Camera:
                 x0, y0, x1, y1 = (max(0.0, min(1.0, float(v))) for v in z)
                 filters.append(f"drawbox=x=iw*{min(x0, x1):.4f}:y=ih*{min(y0, y1):.4f}:w=iw*{abs(x1 - x0):.4f}:h=ih*{abs(y1 - y0):.4f}:color=black@1:t=fill")
             e = self.enhance or {}
+            box = clock_box(self.name) if e.get("hide_clock") else None
+            if box:  # blur the camera's own clock (works at any resolution: all in fractions of the picture)
+                x, y, w, h = box
+                filters.append(f"split[ck0][ck1];[ck1]crop=iw*{w}:ih*{h}:iw*{x}:ih*{y},"
+                               f"boxblur=lr='min(w\\,h)/3':lp=2:cr='min(cw\\,ch)/3':cp=2[ck2];[ck0][ck2]overlay=W*{x}:H*{y}")
             if e.get("deflicker"):  # smooths the brightness pulsing of lamps on mains power (50 Hz)
                 filters.append("deflicker=mode=pm:size=5")
             if e.get("denoise"):  # atadenoise (LGPL): light, and smears movement less than hqdn3d (GPL) did
@@ -265,6 +270,14 @@ MANUAL_MAX_SECONDS = 30 * 60   # a manual recording stops by itself after this
 MOTION_TAIL_SECONDS = 15       # keep recording this long after the last motion
 MOTION_MAX_SECONDS = 10 * 60
 MOTION_PREROLL = 3
+# Where a camera burns its own clock into the picture (fractions x, y, w, h), so BigEye can blur it away and show its
+# own clock top-left instead. bigeye.toml [cameras.<name>] clock_box = [x, y, w, h] overrides.
+CLOCK_BOX = {"cam360": (0.735, 0.03, 0.26, 0.075)}
+
+
+def clock_box(name):
+    box = cfg_camera(name, "clock_box", None)
+    return tuple(box) if box else CLOCK_BOX.get(name)
 NOTIFY_GAP = 120               # at most one phone message per camera per 2 minutes
 
 # The page itself lives next to this script (bigeye-view.html): plain HTML and
@@ -1301,9 +1314,9 @@ class Handler(BaseHTTPRequestHandler):
                 settings(name)["osd"] = bool(body["osd"])
                 CAMS[name].osd = bool(body["osd"])
                 CAMS[name].restart_reader()
-            if any(k in body for k in ("deflicker", "denoise", "night_boost")):
+            if any(k in body for k in ("deflicker", "denoise", "night_boost", "hide_clock")):
                 enh = settings(name).setdefault("enhance", {})
-                for k in ("deflicker", "denoise"):
+                for k in ("deflicker", "denoise", "hide_clock"):
                     if k in body:
                         enh[k] = bool(body[k])
                 if "night_boost" in body:
@@ -1429,7 +1442,7 @@ class Handler(BaseHTTPRequestHandler):
         if path == "":
             config = [{"name": n, "controls": n in CONTROLS, "features": sorted(FEATURES.get(n, ())),
                        # picture help needs the ffmpeg reader (not the MJPEG pass-through)
-                       "enhance": not CAMS[n].passthrough()}
+                       "enhance": not CAMS[n].passthrough(), "clock": bool(clock_box(n))}
                       for n in CAMS]
             with open(PAGE_FILE, encoding="utf-8") as handle:
                 page = handle.read()
