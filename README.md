@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="media/banner.png" alt="Sentinel BigEye: three cheap cameras, no cloud, eyes that think on your own machine" width="100%">
+  <img src="media/banner.png" alt="Sentinel BigEye: cheap cameras and old phones, no cloud, eyes that think at home" width="100%">
 </p>
 
 <p align="center">

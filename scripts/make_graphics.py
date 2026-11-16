@@ -90,12 +90,12 @@ def eye(cx, cy, s):
 
 
 png("banner", frame(1280, 460, f'''{eye(1040, 225, 140)}
-<text x="72" y="104" font-family="Lato" font-weight="700" font-size="20" letter-spacing="7" fill="{GOLD}">SENTINEL ARMORY · OPEN SOURCE</text>
+<text x="72" y="104" font-family="Lato" font-weight="700" font-size="20" letter-spacing="7" fill="{GOLD}">SENTINEL ARMORY · FREE FOR PERSONAL USE</text>
 <rect x="72" y="122" width="360" height="2" fill="url(#rule)"/>
 <text x="68" y="214" font-family="Lato" font-weight="900" font-size="80" letter-spacing="9" fill="{IVORY}">SENTINEL</text>
 <text x="70" y="286" font-family="Lato" font-weight="300" font-size="54" letter-spacing="16" fill="url(#gold)">BIGEYE</text>
-<text x="72" y="344" font-family="Lato" font-weight="400" font-size="26" fill="{IVORY}">Three cheap cameras. No cloud. Eyes that think on your own machine.</text>
-<text x="72" y="424" font-family="Lato" font-weight="700" font-size="14.5" letter-spacing="2.4" fill="{MUTED}">CAM360 · DOOR · WINDOW · LOCAL AI · NARRATOR · GUARD · PHONE APP · CALL-HOME MONITOR</text>''', cyan=True), 1280, 460)
+<text x="72" y="344" font-family="Lato" font-weight="400" font-size="26" fill="{IVORY}">Cheap cameras and old phones. No cloud. Eyes that think at home.</text>
+<text x="72" y="424" font-family="Lato" font-weight="700" font-size="14.5" letter-spacing="2.4" fill="{MUTED}">360 CAMERAS · BATTERY CAMERAS · OLD PHONES · LOCAL AI · FACES · GUARD · PHONE APP · CALL-HOME MONITOR</text>''', cyan=True), 1280, 460)
 
 # ---- section headings ----------------------------------------------------------------
 HEADS = [("problem", "THE PROBLEM"), ("built", "WHAT WAS BUILT"), ("see", "SEE IT"), ("numbers", "THE NUMBERS"),
@@ -184,7 +184,7 @@ def box(x, y, w, h, title, lines, c=GOLD):
     return s + "</g>"
 
 
-g = box(24, 40, 300, 230, "THE CAMERAS", ["three cheap Wi-Fi cameras", "360: ZAS-Q01 (CS2 P2P)", "door: JT-B9, H.264", "window: W2, MJPEG",
+g = box(24, 40, 300, 230, "THE CAMERAS", ["cheap Wi-Fi cameras + old phones", "ZAS-Q01 360 (CS2 P2P)", "JT-B9 (H.264)", "W2 battery (MJPEG)",
                                           "each one wants to call home", "every few seconds"], WARN)
 g += box(390, 24, 470, 262, "CAMERA MACHINE", ["isolated Wi-Fi, no way out", "local bridges: video + every control", "stand-in clouds answer \"OK\"",
                                                      "and keep what they get", "firewall redirects DNS + cloud ports", "reverse tunnel to the main PC"])
