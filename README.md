@@ -128,7 +128,8 @@ version as a service, share your changes too. Contributions: see [CONTRIBUTING.m
   **its pretrained models are for non-commercial research use only.**
 - 360 camera command ids: the public notes in [jphein/eyeplus-icam365-camera](https://github.com/jphein/eyeplus-icam365-camera)
   helped decode them; the bridge here is our own code.
-- RTSP: [bluenviron/gortsplib](https://github.com/bluenviron/gortsplib) (MIT) · GPU runtime: [onnxruntime](https://github.com/microsoft/onnxruntime) (MIT).
+- RTSP: [bluenviron/gortsplib](https://github.com/bluenviron/gortsplib) and [pion](https://github.com/pion) (MIT) · GPU runtime: [onnxruntime](https://github.com/microsoft/onnxruntime) (MIT).
+- Phone app build: the [Gradle](https://gradle.org) wrapper in `android/gradle/wrapper/` (Apache-2.0).
 - Narrator (optional): runs any vision and embedding model you load in LM Studio (tested with Gemma and EmbeddingGemma);
   no model is included, and each model's own licence applies.
 
