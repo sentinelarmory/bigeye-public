@@ -730,6 +730,60 @@ CAMS.forEach(function (c) {
   panel.appendChild(el('details', {}, [el('summary', {text: 'Automation (BigEye)'}), el('div', {'class': 'panel', style: 'padding:0;margin-top:10px;gap:10px'}, aRows)]));
   var motionBox = el('div', {style: 'margin-top:10px'});
   panel.appendChild(el('details', {}, [el('summary', {text: 'Motion sensor (BigEye)'}), motionBox]));
+  // ---- Wi-Fi on a phone camera: see what it is on and what it can see, and move it (BigEye does it over ADB)
+  if (c.phone) {
+    var wNow = el('div', {'class': 'hint', text: 'Press "Look for networks" (takes 5-15 s).'});
+    var wList = el('div', {style: 'display:flex;flex-direction:column;gap:6px;margin-top:8px'});
+    var wJob = el('div', {'class': 'hint'});
+    var sig = function (r) { return r >= -60 ? 'good' : r >= -70 ? 'fair' : 'weak'; };
+    var wj = function (url, obj) { return fetch(url, obj ? {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(obj)} : {})
+      .then(function (r) { return r.json(); }).catch(function () { return {error: 'BigEye did not answer'}; }); };
+    var wPoll = function () {
+      wj('/wifi/' + n + '/job').then(function (j) {
+        if (!j || j.state === 'idle') return;
+        wJob.textContent = (j.state === 'done' ? '✓ ' : j.state === 'failed' ? '⚠ ' : '… ') + j.text;
+        wJob.style.color = j.state === 'failed' ? 'var(--bad, #e5484d)' : '';
+        if (j.state === 'switching' || j.state === 'searching') setTimeout(wPoll, 3000);
+        else { toast(title(n) + ': ' + j.text, j.state === 'done' ? 'ok' : 'bad'); if (j.state === 'done') setTimeout(wLook, 4000); }
+      });
+    };
+    var wConnect = function (net, pw) {
+      wj('/wifi/' + n + '/connect', {ssid: net.ssid, password: pw || '', security: net.security}).then(function (r) {
+        if (r && r.error) { toast(title(n) + ': ' + r.error, 'bad'); return; }
+        wJob.textContent = '… asking the phone to join ' + net.ssid + ' (the picture may drop for up to a minute)'; setTimeout(wPoll, 2000);
+      });
+    };
+    var wLook = function () {
+      wNow.textContent = 'Looking…'; wList.textContent = '';
+      wj('/wifi/' + n).then(function (w) {
+        if (!w || w.error) { wNow.textContent = '⚠ ' + ((w && w.error) || 'no answer') + ' — wireless debugging must be on (port 5555)'; return; }
+        var cu = w.current || {};
+        wNow.textContent = 'Now on: ' + (cu.ssid || '—') + (cu.band ? ' · ' + cu.band : '') + (cu.rssi != null ? ' · ' + cu.rssi + ' dBm (' + sig(cu.rssi) + ')' : '')
+          + ' · ' + (cu.via === 'pc2' ? 'reached through the camera machine' : 'reached directly') + ' · ' + cu.ip;
+        (w.networks || []).forEach(function (net) {
+          var pw = el('input', {'class': 'btn', type: 'password', placeholder: 'password', autocomplete: 'off', style: 'display:none;flex:1;min-width:120px'});
+          var go = el('button', {'class': 'btn', text: net.current ? 'Connected' : 'Connect', onclick: function () {
+            if (net.current) return;
+            if (net.security !== 'open' && pw.style.display === 'none') { pw.style.display = ''; pw.focus(); go.textContent = 'Join'; return; }
+            if (net.security !== 'open' && !pw.value) { toast('Type the password of ' + net.ssid + ' (BigEye never stores it)', 'bad'); return; }
+            var v = pw.value; pw.value = ''; pw.style.display = 'none'; go.textContent = 'Connect';
+            wConnect(net, v);
+          }});
+          if (net.current) go.disabled = true;
+          pw.addEventListener('keydown', function (e) { if (e.key === 'Enter') go.click(); });
+          wList.appendChild(el('div', {'class': 'row', style: 'gap:8px;flex-wrap:wrap;align-items:center'}, [
+            el('b', {text: net.ssid, style: 'min-width:150px'}),
+            el('span', {'class': 'hint', text: net.band + ' · ' + net.rssi + ' dBm (' + sig(net.rssi) + ')' + (net.security === 'open' ? ' · open' : '') + (net.saved ? ' · known' : '')}),
+            pw, go]));
+        });
+      });
+    };
+    panel.appendChild(el('details', {}, [el('summary', {text: 'Wi-Fi (phone)'}), el('div', {style: 'margin-top:10px'}, [
+      el('div', {'class': 'row', style: 'gap:8px;flex-wrap:wrap'}, [el('button', {'class': 'btn', text: 'Look for networks', onclick: wLook}),
+        el('span', {'class': 'hint', text: 'Home Wi-Fi (5 GHz best) keeps the camera Wi-Fi free for the cheap cameras. If a new network does not work, the phone goes back to the one it knew.'})]),
+      wNow, wList, wJob])]));
+    wPoll();
+  }
   // ---- the name shown on the page, in the picture's clock and in alerts (settings stay with the camera)
   var nameIn = el('input', {'class': 'btn', value: title(n), maxlength: 24, style: 'flex:1;min-width:140px', 'aria-label': 'Camera name'});
   var nameSave = el('button', {'class': 'btn', text: 'Save name', onclick: function () {

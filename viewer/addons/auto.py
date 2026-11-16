@@ -148,6 +148,18 @@ class Addon:
         away_after = page.get("away_after_min", 45) * 60
         t, cam = self.last_person
         exits = page.get("exit_cams") or ["door"]   # cameras that see you leave (outside the door)
+        # Owner's rule: the cameras decide, not the phone. Movement at an exit camera starts the clock;
+        # a person seen by any other camera afterwards stops it; 5 quiet minutes later -> Away.
+        for name in exits:
+            if (self.ctx.status.get(name, {}) or {}).get("active"):
+                self.exit_seen = now
+        if t and cam not in exits and t > getattr(self, "exit_seen", 0):
+            self.exit_seen = 0
+        es = getattr(self, "exit_seen", 0)
+        if home and es and now - es > away_after:
+            self.exit_seen = 0
+            self.ctx.set_home(False, f"auto: {int((now - es) / 60)} min since someone went out past the exit cameras, nobody seen inside since")
+            return
         if home and getattr(self, "phone_away_since", None) and now - self.phone_away_since > away_after:
             self.ctx.set_home(False, f"auto: your phone has been off the home Wi-Fi for {int((now - self.phone_away_since) / 60)} min")
             return

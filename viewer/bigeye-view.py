@@ -103,6 +103,11 @@ class Camera:
         time.sleep(0.2)  # let main() set .process first
         if self.passthrough():
             return self._run_passthrough()
+        while True:
+            cmd = self._base_cmd()
+            self._run_once(cmd)
+
+    def _base_cmd(self):
         cmd = ["ffmpeg", "-hide_banner", "-loglevel", "error"]
         if self.url.startswith("rtsp"):
             cmd += ["-rtsp_transport", "tcp"]
@@ -113,7 +118,10 @@ class Camera:
         cmd += ["-fflags", "nobuffer", "-flags", "low_delay", "-i", self.url, "-an", "-q:v", str(self.quality)]
         # Every frame the camera sends, at its own rate (--fps 0), or capped at --fps.
         cmd += ["-fps_mode", "vfr"] if not self.fps else ["-r", str(self.fps)]
-        while True:
+        return cmd
+
+    def _run_once(self, cmd):
+        if True:
             filters = ["hflip,vflip"] if self.flip else []  # camera mounted upside down (ceiling)
             o = getattr(self, "orient", None) or {}   # turn / mirror chosen on the page (phones on their side etc.)
             turn = {90: "transpose=1", 180: "hflip,vflip", 270: "transpose=2"}.get(int(o.get("rotate", 0)))
@@ -170,7 +178,7 @@ class Camera:
                 for f in frames:
                     self._publish(f)
             proc.wait()
-            time.sleep(2)  # stream gone: try again
+            time.sleep(2)  # stream gone: try again (the caller loops)
 
     def _errors(self, proc):
         last = 0.0
@@ -364,7 +372,15 @@ LINKS = {}   # camera -> {"via", "signal", "rtt_ms", "t"}: how each camera is co
 
 
 def _camera_ip(name):
-    """The camera's own address: [cameras.<name>] ip in bigeye.toml, else the host in its URL."""
+    """The camera's own address: a phone's current one (it can be moved between networks), else [cameras.<name>] ip
+    in bigeye.toml, else the host in its URL."""
+    net = (SETTINGS.get(name) or {}).get("phone_net")
+    if net and net.get("ip"):
+        return net["ip"], net.get("via") == "pc2"
+    if name in PHONE_STATUS or str(CAMS[name].url).endswith("/cam.mjpg"):
+        host = urllib.parse.urlsplit(str(CAMS[name].url)).hostname or ""
+        if host not in ("127.0.0.1", "localhost", ""):
+            return host, False
     ip = (CFG.get("cameras", {}).get(name) or {}).get("ip")
     if ip:
         return ip, True
@@ -457,6 +473,119 @@ def phone_watch():
             except Exception:
                 pass
         time.sleep(15)
+
+
+# ---------------------------------------------------------------- phone Wi-Fi (BigEye Cam phones)
+import phone_wifi  # noqa: E402
+PHONE_PORTS = {}     # phone -> local port of its forward through the camera machine (when it is on the camera Wi-Fi)
+PHONE_FWD = {}       # phone -> ssh process keeping that forward
+WIFI_JOBS = {}       # phone -> {"state", "text", "t"}: a network switch in progress
+
+
+def is_phone(name):
+    return name not in CONTROLS and str(CAMS[name].url).endswith("/cam.mjpg")
+
+
+def phone_now(name):
+    """Where the phone is reached now: (ip, via)."""
+    net = settings(name).get("phone_net") or {}
+    if net.get("ip"):
+        return net["ip"], net.get("via", "lan")
+    host = urllib.parse.urlsplit(str(CAMS[name].url)).hostname or ""
+    if host not in ("127.0.0.1", "localhost", ""):
+        return host, "lan"
+    ip = (CFG.get("cameras", {}).get(name) or {}).get("ip")
+    return ip, "pc2"
+
+
+def _forward_keeper(name):
+    while PHONE_PORTS.get(name):
+        port, ip = PHONE_PORTS[name]
+        route = SSH_ROUTES[0]
+        cmd = route[:-1] + ["-N", "-o", "ExitOnForwardFailure=yes", "-o", "ServerAliveInterval=10",
+                            "-L", f"127.0.0.1:{port}:{ip}:8080", route[-1]]
+        proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        PHONE_FWD[name] = proc
+        proc.wait()
+        time.sleep(5)
+
+
+def apply_phone_route(name, ip, via, save=True):
+    """Point the picture at the phone's new address; through the camera machine when it is on the camera Wi-Fi."""
+    old = PHONE_FWD.pop(name, None)
+    if via == "pc2":
+        port = 18790 + sorted(n for n in CAMS if is_phone(n)).index(name)
+        fresh = PHONE_PORTS.get(name) is None
+        PHONE_PORTS[name] = (port, ip)
+        if old:
+            old.kill()          # the keeper starts a new forward to the new address
+        if fresh:
+            threading.Thread(target=_forward_keeper, args=(name,), daemon=True).start()
+        CAMS[name].url = f"http://127.0.0.1:{port}/cam.mjpg"
+    else:
+        PHONE_PORTS.pop(name, None)
+        if old:
+            old.kill()
+        CAMS[name].url = f"http://{ip}:8080/cam.mjpg"
+    if save:
+        SETTINGS.setdefault(name, {})["phone_net"] = {"ip": ip, "via": via}
+        save_settings()
+    PHONE_STATUS.pop(name, None)
+    CAMS[name].restart_reader()
+    log(f"{name}: picture now from {ip} ({'camera Wi-Fi via the camera machine' if via == 'pc2' else 'home Wi-Fi'})")
+
+
+def phone_handle(name):
+    ip, via = phone_now(name)
+    return phone_wifi.Phone(ip, via, SSH_ROUTES)
+
+
+def wifi_info(name):
+    p = phone_handle(name)
+    cur = p.status()
+    saved = p.saved()
+    nets = p.scan()
+    for n in nets:
+        n["saved"], n["current"] = n["ssid"] in saved, n["ssid"] == cur.get("ssid")
+    return {"current": cur, "saved": saved, "networks": nets,
+            "model": (PHONE_STATUS.get(name) or {}).get("model"), "android_sdk": p.sdk()}
+
+
+def _wifi_job(name, ssid, password, sec):
+    def say(state, text):
+        WIFI_JOBS[name] = {"state": state, "text": text, "t": time.time(), "ssid": ssid}
+        log(f"{name}: wifi: {text}")
+    try:
+        p = phone_handle(name)
+        model = (PHONE_STATUS.get(name) or {}).get("model") or p.shell("getprop ro.product.model", 15).strip().splitlines()[-1]
+        known = ssid in p.saved()
+        old_ip, old_via = p.ip, p.via
+        say("switching", f"asking the phone to join {ssid}")
+        p.connect(ssid, password, sec, known)
+    except ValueError as error:
+        return say("failed", str(error))
+    except Exception as error:
+        return say("failed", f"could not start the switch: {error}")
+    password = None
+    say("searching", f"the phone is joining {ssid}; looking for it")
+    home = (CFG.get("app") or {}).get("home_prefix") or ""
+    deadline = time.time() + 6 * 60
+    time.sleep(20)
+    while time.time() < deadline:
+        ip, via = phone_wifi.find_phone(model, home, SSH_ROUTES)
+        if ip:
+            try:
+                now = phone_wifi.Phone(ip, via, SSH_ROUTES).status().get("ssid")
+            except Exception:
+                now = None
+            if ip != old_ip or via != old_via or now == ssid:
+                apply_phone_route(name, ip, via)
+                if now == ssid or now is None:
+                    return say("done", f"on {ssid}" + (f" at {ip}" if ip else ""))
+                return say("failed", f"{ssid} did not work; the phone went back to {now} ({ip})")
+        time.sleep(15)
+    say("failed", f"the phone was not found after the switch to {ssid}. If it joined a network BigEye cannot reach, "
+                  "pick another network on the phone itself")
 
 
 def cam_label(name):
@@ -1406,6 +1535,31 @@ class Handler(BaseHTTPRequestHandler):
         except Exception as error:
             self._send(502, str(error).encode())
 
+    def _wifi(self, parts):
+        name = parts[0] if parts else ""
+        if name not in CAMS or not is_phone(name):
+            return self._json({"error": "not a phone camera"}, 404)
+        if len(parts) == 1:
+            try:
+                return self._json(wifi_info(name))
+            except Exception as error:
+                return self._json({"error": str(error)[:200]}, 502)
+        if parts[1] == "job":
+            return self._json(WIFI_JOBS.get(name) or {"state": "idle"})
+        if parts[1] == "connect" and self.command == "POST":
+            body = self._body_json() or {}
+            ssid, password = str(body.get("ssid") or "")[:64], str(body.get("password") or "")[:64]
+            sec = body.get("security") if body.get("security") in ("open", "owe", "wpa2", "wpa3", "wep") else "wpa2"
+            job = WIFI_JOBS.get(name) or {}
+            if not ssid:
+                return self._json({"error": "no network chosen"}, 400)
+            if job.get("state") in ("switching", "searching"):
+                return self._json({"error": "a switch is already running"}, 409)
+            WIFI_JOBS[name] = {"state": "switching", "text": f"starting the switch to {ssid}", "t": time.time(), "ssid": ssid}
+            threading.Thread(target=_wifi_job, args=(name, ssid, password, sec), daemon=True).start()
+            return self._json({"ok": True})
+        return self._json({"error": "unknown"}, 404)
+
     def _state(self):
         now = time.time()
         out = {}
@@ -1827,7 +1981,8 @@ class Handler(BaseHTTPRequestHandler):
         if path == "":
             config = [{"name": n, "controls": n in CONTROLS, "features": sorted(FEATURES.get(n, ())),
                        # picture help needs the ffmpeg reader (not the MJPEG pass-through)
-                       "enhance": not CAMS[n].passthrough(), "clock": bool(clock_box(n)), "label": cam_label(n)}
+                       "enhance": not CAMS[n].passthrough(), "clock": bool(clock_box(n)), "label": cam_label(n),
+                       "phone": is_phone(n)}
                       for n in CAMS]
             with open(PAGE_FILE, encoding="utf-8") as handle:
                 page = handle.read()
@@ -1836,6 +1991,8 @@ class Handler(BaseHTTPRequestHandler):
             return
         if path == "state":
             return self._state()
+        if path.startswith("wifi/"):
+            return self._wifi(path.split("/")[1:])
         if path.startswith("app/"):
             return self._app(path[4:])
         if path == "telemetry":
@@ -2154,6 +2311,10 @@ def main():
         # The readers started before the settings were read (2026-11-15: clock and picture help missing after
         # every restart until toggled). Restart each reader now so it picks them up.
         cam.restart_reader()
+    for name in CAMS:
+        net = settings(name).get("phone_net")
+        if net and net.get("ip") and is_phone(name):
+            apply_phone_route(name, net["ip"], net.get("via", "lan"), save=False)
     load_events()
     ADDONS.extend(load_addons())
     global TELEMETRY
