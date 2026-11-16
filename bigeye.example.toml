@@ -47,3 +47,11 @@ explorer = "/mnt/c/Windows/explorer.exe"       # WSL only: the folder buttons op
 # The address your phone uses to reach BigEye's phone-app listener (--app-port 8772),
 # shown on the page when you pair a phone. Your PC's LAN address, or its VPN address.
 # phone_url = "http://192.168.1.20:8772"
+
+[alarm]
+# Off-site copy of real alarms (a stranger while Away, or at night on cameras set to keep recording in Home mode):
+# their pictures, one a second, and then the clip are written into this folder. Point it at a folder your cloud
+# client syncs (OneDrive, Dropbox, Nextcloud...) so they are online within seconds, even if the PCs are taken.
+# Leave it empty to keep everything at home.
+offsite_dir = ""
+night = "22-07"

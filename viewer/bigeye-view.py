@@ -15,6 +15,7 @@ Add-ons (motion sensor and later AI features) live in ./addons/*.py.
 import argparse
 import collections
 import datetime
+import shutil
 import importlib.util
 import io
 import json
@@ -736,6 +737,8 @@ def trigger(name, info):
     except OSError:
         pass
     log(f"{name}: motion event ({info})")
+    if is_real_alarm(name, info) and offsite_dir():
+        threading.Thread(target=offsite_copy, args=(name, frame, "stranger"), daemon=True).start()
     if cfg.get("notify") and now - LAST_NOTIFY.get(name, 0) > NOTIFY_GAP:
         LAST_NOTIFY[name] = now
         who = (info.get('name') or ('Stranger' if info.get('label') == 'person' else info.get('label')) or 'movement').capitalize()
@@ -743,6 +746,84 @@ def trigger(name, info):
                    os.path.relpath(pic, SAVE_ROOT))
         threading.Thread(target=notify_phone, args=(name, f"{(info.get('name') or ('Stranger' if info.get('label') == 'person' else info.get('label')) or 'movement').capitalize()} at {stamp.strftime('%H:%M:%S')}"),
                          daemon=True).start()
+
+
+# ── off-site copy of real alarms ───────────────────────────────────────────
+# A real alarm: a stranger (a person who is not a known face) while Away, or at night on a camera that keeps recording
+# in Home mode (door, window). Its pictures go straight into a cloud-synced folder (OneDrive), one a second, so they
+# are online within seconds even if the PCs are taken or the power is cut; the finished clip follows.
+OFFSITE_ACTIVE = set()
+OFFSITE_MAX_S = 300
+
+
+def offsite_dir():
+    d = (CFG.get("alarm") or {}).get("offsite_dir")
+    return os.path.expanduser(d) if d else None
+
+
+def is_night(now=None):
+    try:
+        a, b = (int(x) for x in str((CFG.get("alarm") or {}).get("night", "22-07")).split("-"))
+    except ValueError:
+        a, b = 22, 7
+    h = datetime.datetime.fromtimestamp(now or time.time()).hour
+    return h >= a or h < b if a > b else a <= h < b
+
+
+def is_real_alarm(name, info):
+    if info.get("label") != "person" or info.get("name"):
+        return False   # only strangers: known faces and animals are never an alarm
+    away = not SETTINGS.get("_page", {}).get("home")
+    cfg = settings(name).get("motion", {})
+    return away or (cfg.get("at_home") and is_night())
+
+
+def offsite_copy(name, first_frame, event_name):
+    """Write the alarm's pictures (the 3 s before, then one a second) and finally its clip into the off-site folder."""
+    root = offsite_dir()
+    if not root or name in OFFSITE_ACTIVE:
+        return
+    OFFSITE_ACTIVE.add(name)
+    try:
+        stamp = datetime.datetime.now()
+        folder = os.path.join(root, stamp.strftime("%Y-%m-%d"), f"{stamp.strftime('%H%M%S')}-{name}-{event_name}")
+        os.makedirs(folder, exist_ok=True)
+        cam = CAMS[name]
+        n = 0
+        for t, jpeg in list(cam.recent):  # what happened just before
+            with open(os.path.join(folder, f"{name}-{datetime.datetime.fromtimestamp(t).strftime('%H%M%S-%f')[:-3]}-before.jpg"), "wb") as fh:
+                fh.write(jpeg)
+        if first_frame:
+            with open(os.path.join(folder, f"{name}-{stamp.strftime('%H%M%S')}-ALARM.jpg"), "wb") as fh:
+                fh.write(first_frame)
+        log(f"{name}: alarm, copying pictures off-site to {folder}")
+        start, last_stamp, clip = time.time(), None, None
+        while time.time() - start < OFFSITE_MAX_S:
+            rec = running_recorder(name)
+            if rec:
+                clip = rec.path
+            elif time.time() - start > 15:
+                break                       # the recording has ended
+            if cam.frame is not None and cam.stamp != last_stamp:
+                last_stamp = cam.stamp
+                n += 1
+                with open(os.path.join(folder, f"{name}-{datetime.datetime.now().strftime('%H%M%S')}.jpg"), "wb") as fh:
+                    fh.write(cam.frame)
+            time.sleep(1)
+        if clip:
+            for _ in range(30):             # the recorder finishes the file a moment after it stops
+                if not running_recorder(name):
+                    break
+                time.sleep(1)
+            try:
+                shutil.copy2(clip, os.path.join(folder, os.path.basename(clip)))
+            except OSError as error:
+                log(f"{name}: off-site clip copy failed: {error}")
+        log(f"{name}: alarm off-site copy done ({n} pictures{', clip' if clip else ''})")
+    except Exception as error:
+        log(f"{name}: off-site copy failed: {error}")
+    finally:
+        OFFSITE_ACTIVE.discard(name)
 
 
 ADDON_ACTIONS = {}  # (action, camera) -> function, e.g. ("follow-learn", "cam360")
@@ -1427,7 +1508,9 @@ class Handler(BaseHTTPRequestHandler):
                 pic = os.path.relpath(path, SAVE_ROOT)
             push_alert(f"TEST: Stranger at the {cam} camera", f"Stranger at {time.strftime('%H:%M:%S')} (you are Away). "
                        "This is only a test from BigEye.", "urgent", cam, pic)
-            return self._json({"ok": True, "cam": cam, "picture": pic})
+            if q.get("offsite") == "1" and cam and offsite_dir():   # also test the off-site copy (about 15 pictures)
+                threading.Thread(target=offsite_copy, args=(cam, CAMS[cam].frame, "TEST"), daemon=True).start()
+            return self._json({"ok": True, "cam": cam, "picture": pic, "offsite": bool(q.get("offsite") == "1" and offsite_dir())})
         if what == "info" and not self.remote:
             return self._json({"address": CFG.get("app", {}).get("phone_url", ""), "apk": os.path.exists(APK_FILE)})
         if what == "devices" and not self.remote:
