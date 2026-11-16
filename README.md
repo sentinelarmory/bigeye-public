@@ -10,6 +10,11 @@
   <img alt="License: AGPL-3.0" src="https://img.shields.io/badge/License-AGPL--3.0-d9aa55?style=for-the-badge">
 </p>
 
+<p align="center">
+  <img src="media/demo.gif" alt="The live BigEye page on the 360 camera: a person walks through a kitchen and gets a person box; face and personal items blurred" width="100%"><br>
+  <sub><i>The real BigEye page, live from the 360 camera in the reference home. Face, a name on a letter and family photos are blurred for this clip.</i></sub>
+</p>
+
 <p align="center"><b>Cheap Wi-Fi cameras want to phone home every few seconds.<br>BigEye keeps them inside your house and gives them a brain of their own.</b></p>
 
 If you bought a cheap pan/tilt or battery camera that only works through the vendor's app and cloud, BigEye
