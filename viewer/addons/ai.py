@@ -19,7 +19,7 @@ SERVICE = "http://127.0.0.1:8771"
 # (127.0.0.1:18771). If it does not answer, this PC's AI takes over at once and the camera machine is tried again after a minute.
 # Faces stay on this PC: when the camera machine sees a person, this PC is asked once more for names (and the stranger gallery).
 REMOTE = os.environ.get("BIGEYE_AI_REMOTE", "http://127.0.0.1:18771")
-REMOTE_CAMS = {c for c in os.environ.get("BIGEYE_AI_REMOTE_CAMS", "door,window").split(",") if c}
+REMOTE_CAMS = {c for c in os.environ.get("BIGEYE_AI_REMOTE_CAMS", "").split(",") if c}  # e.g. "door,window"
 REMOTE_RETRY_S = 60
 INTERVAL = 0.5
 MIN_SCORE = {"person": 0.55, "cat": 0.45, "dog": 0.45}
