@@ -68,6 +68,10 @@ uv pip install -p /tmp/export/bin/python ultralytics onnxslim \
   && /tmp/export/bin/python -c "from ultralytics import YOLO; YOLO('yolo11s.pt').export(format='onnx', imgsz=640, simplify=True)"
 ```
 
+**Older NVIDIA cards (GTX 10-series, Pascal):** the newest `onnxruntime-gpu` is built for CUDA 13, which no longer
+supports them ("CUBLAS failure 8: architectural feature absent"). Install `"onnxruntime-gpu[cuda,cudnn]==1.22.0"`
+(CUDA 12) instead; a GTX 1060 then runs RF-DETR Small in about 15 ms per picture.
+
 The detectors are tried in the order of `BIGEYE_MODELS` (default `rfdetr-small.onnx,yolo11s.onnx`); a missing file
 is skipped. Leave YOLO11 out for a setup with no AGPL parts in the detector.
 
