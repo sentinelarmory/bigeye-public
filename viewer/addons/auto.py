@@ -138,8 +138,9 @@ class Addon:
             self.ctx.set_home(True, "auto: a known face was seen")
         away_after = page.get("away_after_min", 45) * 60
         t, cam = self.last_person
-        if home and t and now - t > away_after and cam == "door":
-            self.ctx.set_home(False, f"auto: nobody seen for {int((now - t) / 60)} min, last person was at the door")
+        exits = page.get("exit_cams") or ["door"]   # cameras that see you leave (outside the door)
+        if home and t and now - t > away_after and cam in exits:
+            self.ctx.set_home(False, f"auto: nobody seen for {int((now - t) / 60)} min, last person was at the {cam} camera")
 
     # -------------------------------------------------------------------------------------
     def _timelapse(self):

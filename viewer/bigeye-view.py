@@ -1713,9 +1713,18 @@ class Handler(BaseHTTPRequestHandler):
         if path == "autohome":
             page = SETTINGS.setdefault("_page", {})
             if self.command == "POST":
-                page["auto_home"] = not page.get("auto_home", False)
+                body = self._body_json() or {}
+                if not body:
+                    page["auto_home"] = not page.get("auto_home", False)   # the header button: on/off
+                if isinstance(body.get("on"), bool):
+                    page["auto_home"] = body["on"]
+                if isinstance(body.get("away_after_min"), int):
+                    page["away_after_min"] = max(1, min(240, body["away_after_min"]))
+                if isinstance(body.get("exit_cams"), list):
+                    page["exit_cams"] = [c for c in body["exit_cams"] if c in CAMS]
                 save_settings()
-            return self._json({"on": page.get("auto_home", False), "away_after_min": page.get("away_after_min", 45)})
+            return self._json({"on": page.get("auto_home", False), "away_after_min": page.get("away_after_min", 45),
+                               "exit_cams": page.get("exit_cams") or ["door"]})
         if path == "home":
             page = SETTINGS.setdefault("_page", {})
             if self.command == "POST":
