@@ -41,6 +41,9 @@ the cameras make to reach their vendor.
 ## Is this for you?
 
 - [ ] You have one of the [tested cameras](#cameras) (or a close relative) and do not want it talking to the vendor.
+  *(Many cheap app-only cameras sold on online marketplaces use the same two protocols, so there is a fair chance
+  yours works; see [Cameras](#cameras) for how to check. Any camera that already offers RTSP works too, for live
+  view, recording and AI, just without the camera-specific controls.)*
 - [ ] You have a **Linux machine with a Wi-Fi card** that can host a hotspot for the cameras (an old PC is fine).
 - [ ] You are comfortable with `systemd --user`, `nftables` and editing one settings file.
 - [ ] *(Optional)* an NVIDIA GPU for fast detection; a modern CPU works too (about 125 ms a picture instead of 5).
