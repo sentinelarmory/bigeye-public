@@ -295,7 +295,10 @@ def load_batt_hist():
     try:
         with open(BATT_HIST_FILE) as fh:
             for name, pts in json.load(fh).items():
-                BATT_HIST[name] = collections.deque((tuple(p) for p in pts if time.time() - p[0] < 3600), maxlen=400)
+                pts = [tuple(p) for p in pts if time.time() - p[0] < 3600]
+                good = [p for i, p in enumerate(pts)   # drop lone stray readings saved before the filter
+                        if not (0 < i < len(pts) - 1 and abs(p[1] - pts[i - 1][1]) > 10 and abs(p[1] - pts[i + 1][1]) > 10)]
+                BATT_HIST[name] = collections.deque(good, maxlen=400)
     except (OSError, ValueError):
         pass
 
@@ -309,11 +312,23 @@ def save_batt_hist():
         pass
 
 
+BATT_PENDING = {}
+
+
 def note_battery(name, pct, charging):
     if pct is None:
         return
     h = BATT_HIST.setdefault(name, collections.deque(maxlen=400))
-    h.append((time.time(), float(pct), bool(charging)))
+    pct = float(pct)
+    # Some cameras (W2) now and then report a stray value (71 % between 100 % readings).
+    # A jump of more than 10 points only counts once the next reading confirms it.
+    if h and abs(pct - h[-1][1]) > 10:
+        pend = BATT_PENDING.get(name)
+        if not pend or abs(pend - pct) > 3:
+            BATT_PENDING[name] = pct
+            return
+    BATT_PENDING.pop(name, None)
+    h.append((time.time(), pct, bool(charging)))
 
 
 def battery_trend(name):
@@ -343,6 +358,69 @@ def power_warning(name):
     if slope_h > -1.0 or pts[0][1] - pts[-1][1] < 2:                 # steady or rising (or just noise)
         return None
     return {"per_h": round(slope_h, 1), "empty_min": int(pts[-1][1] / -slope_h * 60)}
+
+
+LINKS = {}   # camera -> {"via", "signal", "rtt_ms", "t"}: how each camera is connected, for the card
+
+
+def _camera_ip(name):
+    """The camera's own address: [cameras.<name>] ip in bigeye.toml, else the host in its URL."""
+    ip = (CFG.get("cameras", {}).get(name) or {}).get("ip")
+    if ip:
+        return ip, True
+    host = urllib.parse.urlsplit(str(CAMS[name].url)).hostname or ""
+    return (None, False) if host in ("127.0.0.1", "localhost", "") else (host, False)
+
+
+def _ping_line(out):
+    m = re.search(r"= [\d.]+/([\d.]+)/", out)
+    return round(float(m.group(1))) if m else None
+
+
+def link_watch():
+    """Every 30 s: which way each camera is connected, its Wi-Fi signal on the camera machine and its round trip."""
+    while True:
+        far = {n: ip for n in CAMS for ip, on_pc2 in [_camera_ip(n)] if ip and on_pc2}
+        near = {n: ip for n in CAMS for ip, on_pc2 in [_camera_ip(n)] if ip and not on_pc2}
+        if far:
+            cmd = ("ip neigh show dev wlp5s0; echo ===; iw dev wlp5s0 station dump; echo ===; "
+                   + "; ".join(f"echo PING {ip}; ping -c3 -i0.2 -W1 {ip} | tail -1" for ip in far.values()))
+            for route in SSH_ROUTES:
+                try:
+                    out = subprocess.run(route + [cmd], capture_output=True, text=True, timeout=25).stdout
+                except Exception:
+                    continue
+                if "===" not in out:
+                    continue
+                neigh, stations, pings = (out.split("===") + ["", ""])[:3]
+                mac = {m.group(1): m.group(2).lower() for m in re.finditer(r"(\S+) lladdr (\S+)", neigh)}
+                sig = {m.group(1).lower(): int(m.group(2)) for m in
+                       re.finditer(r"Station (\S+).*?signal:\s*(-?\d+)", stations, re.S)}
+                rtt = {m.group(1): _ping_line(m.group(2)) for m in
+                       re.finditer(r"PING (\S+)\n(.*?)(?=PING |\Z)", pings, re.S)}
+                for n, ip in far.items():
+                    LINKS[n] = {"via": "camera Wi-Fi via the camera machine", "signal": sig.get(mac.get(ip, "")),
+                                "rtt_ms": rtt.get(ip), "t": time.time()}
+                break
+        for n, ip in near.items():
+            try:
+                out = subprocess.run(["ping", "-c3", "-i0.2", "-W1", ip], capture_output=True, text=True, timeout=8).stdout
+            except Exception:
+                out = ""
+            LINKS[n] = {"via": "home Wi-Fi, direct", "signal": None, "rtt_ms": _ping_line(out), "t": time.time()}
+        time.sleep(30)
+
+
+def link_text(name):
+    k = LINKS.get(name)
+    if not k or time.time() - k["t"] > 120:
+        return None
+    parts = [k["via"]]
+    if k["signal"] is not None:
+        q = "good" if k["signal"] >= -60 else "fair" if k["signal"] >= -70 else "weak"
+        parts.append(f'{k["signal"]} dBm ({q})')
+    parts.append(f'ping {k["rtt_ms"]} ms' if k["rtt_ms"] is not None else "ping —")
+    return " · ".join(parts)
 
 
 def phone_watch():
@@ -1212,7 +1290,11 @@ def note_presence(device, wifi):
     if not device or wifi is None or not prefix:
         return
     addrs = [a.strip() for a in wifi.split(",") if a.strip()]
-    PRESENCE[device] = {"t": time.time(), "home": any(a.startswith(prefix) for a in addrs)}
+    home = any(a.startswith(prefix) for a in addrs)
+    was = PRESENCE.get(device)
+    if not was or was["home"] != home or time.time() - was["t"] > PRESENCE_FRESH_S:
+        log(f"presence: {device} {'on the home Wi-Fi' if home else 'away from the home Wi-Fi'}")
+    PRESENCE[device] = {"t": time.time(), "home": home}
 
 
 def phones_home():
@@ -1329,6 +1411,10 @@ class Handler(BaseHTTPRequestHandler):
         out = {}
         for name, cam in CAMS.items():
             item = {"age": max(0.0, round(now - cam.stamp, 1)) if cam.stamp else -1}
+            lk = link_text(name)
+            if lk:
+                item["link"] = lk
+                item["link_weak"] = (LINKS[name].get("signal") or 0) < -70   # cheap cameras often skip pings; only signal counts
             rec = running_recorder(name)
             if rec:
                 item["recording"] = {"left": rec.left(), "reason": rec.reason, "for": int(now - rec.started)}
@@ -2089,6 +2175,7 @@ def main():
     threading.Thread(target=story_at_night, daemon=True).start()
     threading.Thread(target=camera_watch, daemon=True).start()
     threading.Thread(target=phone_watch, daemon=True).start()
+    threading.Thread(target=link_watch, daemon=True).start()
     print(f"Sentinel-BigEye: http://localhost:{args.port}/")
     if args.app_port:
         app_server = ThreadingHTTPServer((args.app_bind, args.app_port), AppHandler)
