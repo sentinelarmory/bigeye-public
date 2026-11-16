@@ -114,6 +114,12 @@ class Camera:
         cmd += ["-fps_mode", "vfr"] if not self.fps else ["-r", str(self.fps)]
         while True:
             filters = ["hflip,vflip"] if self.flip else []  # camera mounted upside down (ceiling)
+            o = getattr(self, "orient", None) or {}   # turn / mirror chosen on the page (phones on their side etc.)
+            turn = {90: "transpose=1", 180: "hflip,vflip", 270: "transpose=2"}.get(int(o.get("rotate", 0)))
+            if turn:
+                filters.append(turn)
+            if o.get("mirror"):
+                filters.append("hflip")
             # The door camera switches between full and limited colour range; the JPEG
             # encoder refuses limited range ("Non full-range YUV"), so always convert.
             filters.append("scale=out_range=pc,format=yuvj420p")
@@ -1314,6 +1320,14 @@ class Handler(BaseHTTPRequestHandler):
                 settings(name)["osd"] = bool(body["osd"])
                 CAMS[name].osd = bool(body["osd"])
                 CAMS[name].restart_reader()
+            if "rotate" in body or "mirror" in body:   # BigEye turns the picture itself: works for every camera
+                o = settings(name).setdefault("orient", {"rotate": 0, "mirror": False})
+                if body.get("rotate") in (0, 90, 180, 270):
+                    o["rotate"] = body["rotate"]
+                if "mirror" in body:
+                    o["mirror"] = bool(body["mirror"])
+                CAMS[name].orient = dict(o)
+                CAMS[name].restart_reader()
             if any(k in body for k in ("deflicker", "denoise", "night_boost", "hide_clock")):
                 enh = settings(name).setdefault("enhance", {})
                 for k in ("deflicker", "denoise", "hide_clock"):
@@ -1334,7 +1348,8 @@ class Handler(BaseHTTPRequestHandler):
         self._json(dict(m, record_on=m.get("record_on", "person"), look_for=m.get("look_for", "all"), ai=m.get("ai", True), skip_known=m.get("skip_known", True), at_home=m.get("at_home", False),
                         picture=settings(name).get("picture", {"brightness": 0, "contrast": 0}),
                         enhance=settings(name).get("enhance", {}), auto=settings(name).get("auto", {}),
-                        privacy=settings(name).get("privacy", []), osd=settings(name).get("osd", False)))
+                        privacy=settings(name).get("privacy", []), osd=settings(name).get("osd", False),
+                        orient=settings(name).get("orient", {"rotate": 0, "mirror": False})))
 
     def _saved_file(self, rest):
         rel = urllib.parse.unquote(rest)
@@ -1749,6 +1764,7 @@ def main():
         if pic:
             cam.eq = (pic.get("brightness", 0), pic.get("contrast", 0))
         cam.enhance = dict(settings(name).get("enhance", {}))
+        cam.orient = dict(settings(name).get("orient", {}))
         cam.privacy = list(settings(name).get("privacy", []))
         cam.osd = bool(settings(name).setdefault("osd", name in ("door", "window")))  # the door camera lost its own stamp
         # The readers started before the settings were read (2026-11-15: clock and picture help missing after
