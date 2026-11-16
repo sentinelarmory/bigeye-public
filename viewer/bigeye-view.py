@@ -288,6 +288,27 @@ BATT_HIST = {}      # camera name -> deque of (time, percent, charging)
 POWER_WARNED = {}   # camera name -> when the owner was last told
 
 
+BATT_HIST_FILE = os.path.expanduser("~/.cache/sentinel-bigeye-batthist.json")   # survives a page restart
+
+
+def load_batt_hist():
+    try:
+        with open(BATT_HIST_FILE) as fh:
+            for name, pts in json.load(fh).items():
+                BATT_HIST[name] = collections.deque((tuple(p) for p in pts if time.time() - p[0] < 3600), maxlen=400)
+    except (OSError, ValueError):
+        pass
+
+
+def save_batt_hist():
+    try:
+        with open(BATT_HIST_FILE + ".tmp", "w") as fh:
+            json.dump({k: list(v) for k, v in BATT_HIST.items()}, fh)
+        os.replace(BATT_HIST_FILE + ".tmp", BATT_HIST_FILE)
+    except OSError:
+        pass
+
+
 def note_battery(name, pct, charging):
     if pct is None:
         return
@@ -314,7 +335,9 @@ def power_warning(name):
 
 def phone_watch():
     """Phones running BigEye Cam: read their status next to the picture (no control service of their own)."""
+    load_batt_hist()
     while True:
+        save_batt_hist()
         for name in [n for n in CAMS if "pir" in FEATURES.get(n, ()) and n in CONTROLS]:   # battery cameras (W2)
             try:
                 with urllib.request.urlopen(f"{CONTROLS[name]}/status", timeout=3) as r:
