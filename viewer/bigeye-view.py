@@ -804,6 +804,32 @@ def is_real_alarm(name, info):
     return away or (cfg.get("at_home") and is_night())
 
 
+ALARM_AIMED = [0.0]
+
+
+def alarm_aim(source):
+    """A real alarm somewhere: turn the PTZ camera to the alarm position (bigeye.toml [alarm] aim = "<favourite>"),
+    hold it there (follow pauses) and record it too, with its pictures going off-site like the others."""
+    want = (CFG.get("alarm") or {}).get("aim")
+    ptz = next((n for n in CAMS if "ptz" in FEATURES.get(n, ())), None)
+    if not want or not ptz or ptz == source or time.time() - ALARM_AIMED[0] < 180:
+        return
+    p = next((p for p in settings(ptz).get("ptz", {}).get("presets", []) if p["name"] == want), None)
+    if not p:
+        log(f"alarm: no favourite position called {want!r} on {ptz}")
+        return
+    ALARM_AIMED[0] = time.time()
+    MANUAL_UNTIL[ptz] = time.time() + 300        # follow keeps still for 5 minutes
+    try:
+        ptz_goto(ptz, p["x"], p["y"])
+        log(f"alarm at {source}: {ptz} turned to {want!r}")
+    except Exception as error:
+        log(f"alarm: could not turn {ptz}: {error}")
+    time.sleep(6)                                # let it arrive before recording
+    start_recording(ptz, "alarm", preroll=0, max_seconds=300, stop_after=60)
+    offsite_copy(ptz, CAMS[ptz].frame, f"aimed-{source}")
+
+
 def offsite_copy(name, first_frame, event_name):
     """Write the alarm's pictures (the 3 s before, then one a second) and finally its clip into the off-site folder."""
     root = offsite_dir()
@@ -813,7 +839,7 @@ def offsite_copy(name, first_frame, event_name):
     try:
         before = list(CAMS[name].recent)         # keep what happened just before, while we wait
         stamp = datetime.datetime.now()
-        if event_name != "TEST":
+        if event_name != "TEST" and not event_name.startswith("aimed-"):   # an aimed camera follows a confirmed alarm
             for _ in range(ALARM_GRACE_S):
                 time.sleep(1)
                 if SETTINGS.get("_page", {}).get("home") and not is_night():
@@ -823,6 +849,8 @@ def offsite_copy(name, first_frame, event_name):
                 if any(d.get("name") and not d.get("pet") for d in found):
                     log(f"{name}: not an alarm (a known face)")
                     return
+        if not event_name.startswith("aimed-") and event_name != "TEST":
+            threading.Thread(target=alarm_aim, args=(name,), daemon=True).start()
         folder = os.path.join(root, stamp.strftime("%Y-%m-%d"), f"{stamp.strftime('%H%M%S')}-{name}-{event_name}")
         os.makedirs(folder, exist_ok=True)
         cam = CAMS[name]
@@ -1584,6 +1612,9 @@ class Handler(BaseHTTPRequestHandler):
                 pic = os.path.relpath(path, SAVE_ROOT)
             push_alert(f"TEST: Stranger at the {cam} camera", f"Stranger at {time.strftime('%H:%M:%S')} (you are Away). "
                        "This is only a test from BigEye.", "urgent", cam, pic)
+            if q.get("aim") == "1" and cam:   # also test turning the PTZ camera to the alarm position
+                ALARM_AIMED[0] = 0.0
+                threading.Thread(target=alarm_aim, args=(cam,), daemon=True).start()
             if q.get("offsite") == "1" and cam and offsite_dir():   # also test the off-site copy (about 15 pictures)
                 threading.Thread(target=offsite_copy, args=(cam, CAMS[cam].frame, "TEST"), daemon=True).start()
             return self._json({"ok": True, "cam": cam, "picture": pic, "offsite": bool(q.get("offsite") == "1" and offsite_dir())})

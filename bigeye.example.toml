@@ -57,3 +57,6 @@ home_prefix = ""
 # Leave it empty to keep everything at home.
 offsite_dir = ""
 night = "22-07"
+# On a real alarm the pan/tilt camera turns to this favourite position (name as saved on the page), holds it,
+# records and copies its pictures off-site too. Empty = it stays where it is.
+aim = ""
