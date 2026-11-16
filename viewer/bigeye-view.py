@@ -147,7 +147,7 @@ class Camera:
             post = []
             if self.osd:
                 post.append("drawtext=fontfile=" + OSD_FONT + ":text='%{localtime\\:%Y-%m-%d %H\\\\\\:%M\\\\\\:%S}  "
-                            + self.name.capitalize() + "':x=16:y=16:fontsize=h/32:fontcolor=white:borderw=2:bordercolor=black@0.8")
+                            + self.name.capitalize() + "':x=w-tw-16:y=16:fontsize=h/32:fontcolor=white:borderw=2:bordercolor=black@0.8")
             if polys:  # free-hand privacy masks: a picture with black shapes laid over the video
                 mask = privacy_mask_png(self.name, polys)
                 graph = (",".join(filters) + "[pre];" if filters else "[in]null[pre];") + \
@@ -1766,7 +1766,8 @@ def main():
         cam.enhance = dict(settings(name).get("enhance", {}))
         cam.orient = dict(settings(name).get("orient", {}))
         cam.privacy = list(settings(name).get("privacy", []))
-        cam.osd = bool(settings(name).setdefault("osd", name in ("door", "window")))  # the door camera lost its own stamp
+        # Every camera shows date/time top right: BigEye's stamp, unless the camera burns in its own clock there (360).
+        cam.osd = bool(settings(name).setdefault("osd", not clock_box(name)))
         # The readers started before the settings were read (2026-11-15: clock and picture help missing after
         # every restart until toggled). Restart each reader now so it picks them up.
         cam.restart_reader()

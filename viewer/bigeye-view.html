@@ -690,8 +690,8 @@ CAMS.forEach(function (c) {
       row('Flicker fix', [fl, el('span', {'class': 'hint', text: 'smooths lamps pulsing on 50 Hz mains'})]),
       row('Noise reduction', [dn]),
       row('Night boost', [nb, el('span', {'class': 'hint', text: 'lifts dark areas; recordings and the AI see it too'})]),
-      row('Date/time stamp', [os, el('span', {'class': 'hint', text: "BigEye's own clock in the top-left corner (also in recordings)"})])]
-      .concat(c.clock ? [row("Camera's own clock", [hc, el('span', {'class': 'hint', text: 'blur the clock the camera burns in (top right); use the stamp above instead'})])] : []))]));
+      row('Date/time stamp', [os, el('span', {'class': 'hint', text: "BigEye's own clock in the top-right corner, like the cameras' own (also in recordings)"})])]
+      )]));
   }
   // ---- automation (BigEye) and privacy masks
   var autoPost = function (k, v, note) { var o = {auto: {}}; o.auto[k] = v; return postJSON('/settings/' + n, o).then(function () { toast(title(n) + ': ' + note, 'ok'); return true; }); };
