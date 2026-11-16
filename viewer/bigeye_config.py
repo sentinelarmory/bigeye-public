@@ -67,3 +67,41 @@ def path(section, key):
 
 def camera(name, key, default=None):
     return CFG["cameras"].get(name, {}).get(key, default)
+
+
+# ── video encoding ──────────────────────────────────────────────────────────
+# H.264 for recordings and timelapses without GPL parts: the graphics card's own video encoder (NVENC, almost no
+# processor load, separate from the cores the AI uses) first, Cisco's OpenH264 (BSD) as the processor fallback.
+# libx264 (GPL) is used only if neither works, so a stock ffmpeg still records.
+_ENCODER = []
+
+
+def h264_args(quality=23):
+    """ffmpeg output arguments for H.264 at about this quality (lower = better, like CRF)."""
+    import subprocess
+    if not _ENCODER:
+        for enc in ("h264_nvenc", "libopenh264", "libx264"):
+            try:
+                r = subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i",
+                                    "testsrc2=s=640x360:d=0.2", "-c:v", enc, "-f", "null", "-"],
+                                   capture_output=True, timeout=20)
+            except Exception:
+                continue
+            if r.returncode == 0:
+                _ENCODER.append(enc)
+                break
+        else:
+            _ENCODER.append("libx264")
+    enc = _ENCODER[0]
+    if enc == "h264_nvenc":
+        # NVENC's cq is not libx264's crf: +3 gives slightly better pictures than libx264 at that crf (SSIM 0.991
+        # vs 0.989 on a 360 clip, 2026-11-16) for ~1.5x the size, at about a fifth of the processor time.
+        return ["-c:v", "h264_nvenc", "-preset", "p4", "-rc", "vbr", "-cq", str(quality + 3), "-b:v", "0", "-pix_fmt", "yuv420p"]
+    if enc == "libopenh264":
+        return ["-c:v", "libopenh264", "-b:v", "4M", "-pix_fmt", "yuv420p"]
+    return ["-c:v", "libx264", "-preset", "veryfast", "-crf", str(quality), "-pix_fmt", "yuv420p"]
+
+
+def h264_encoder():
+    h264_args()
+    return _ENCODER[0]

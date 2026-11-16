@@ -24,6 +24,11 @@ try:  # where the home is, for sunrise and sunset: [location] lat/lon in bigeye.
     _loc = _CFG.get("location", {})
 except Exception:
     _loc = {}
+try:
+    from bigeye_config import h264_args
+except Exception:  # standalone: plain libx264
+    def h264_args(quality=23):
+        return ["-c:v", "libx264", "-crf", str(quality), "-pix_fmt", "yuv420p"]
 _lat, _lon = os.environ.get("BIGEYE_LAT", _loc.get("lat")), os.environ.get("BIGEYE_LON", _loc.get("lon"))
 LAT, LON = (float(_lat), float(_lon)) if _lat is not None and _lon is not None else (None, None)
 TIMELAPSE_EVERY = 30
@@ -165,8 +170,8 @@ class Addon:
                         src = os.path.join(frames_root, day, name)
                         out = os.path.join(root, f"{name}-{day}.mp4")
                         r = subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-framerate", "30",
-                                            "-pattern_type", "glob", "-i", os.path.join(src, "*.jpg"), "-c:v", "libx264",
-                                            "-crf", "26", "-pix_fmt", "yuv420p", "-movflags", "+faststart", out])
+                                            "-pattern_type", "glob", "-i", os.path.join(src, "*.jpg"), *h264_args(26),
+                                            "-movflags", "+faststart", out])
                         if r.returncode == 0:
                             shutil.rmtree(src, ignore_errors=True)
                             self.ctx.log(f"{name}: timelapse for {day} saved ({out})")

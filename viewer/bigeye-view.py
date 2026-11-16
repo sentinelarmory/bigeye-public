@@ -31,7 +31,7 @@ SOI, EOI = b"\xff\xd8", b"\xff\xd9"
 HERE = os.path.dirname(os.path.abspath(__file__))
 import sys as _sys
 _sys.path.insert(0, HERE)
-from bigeye_config import CFG, camera as cfg_camera, path as cfg_path  # noqa: E402  (one TOML file, see bigeye_config.py)
+from bigeye_config import CFG, camera as cfg_camera, path as cfg_path, h264_args  # noqa: E402  (one TOML file, see bigeye_config.py)
 PREROLL_SECONDS = 4  # pictures kept in memory so a motion recording can start before the alarm
 
 
@@ -129,8 +129,8 @@ class Camera:
             e = self.enhance or {}
             if e.get("deflicker"):  # smooths the brightness pulsing of lamps on mains power (50 Hz)
                 filters.append("deflicker=mode=pm:size=5")
-            if e.get("denoise"):
-                filters.append("hqdn3d=3:2:6:4")
+            if e.get("denoise"):  # atadenoise (LGPL): light, and smears movement less than hqdn3d (GPL) did
+                filters.append("atadenoise=0a=0.02:1a=0.04:2a=0.02:0b=0.04:1b=0.08:2b=0.04:s=5")
             if e.get("night_boost"):  # lift dark areas without touching the camera's night vision
                 filters.append(["", "eq=gamma=1.35:brightness=0.03:saturation=1.1", "eq=gamma=1.7:brightness=0.06:saturation=1.15"][int(e["night_boost"])])
             post = []
@@ -367,8 +367,7 @@ class Recorder:
         except Exception:
             width, height = 1920, 1080
         cmd = ["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-f", "mjpeg", "-framerate", str(self.FPS),
-               "-i", "pipe:0", "-vf", f"scale={width}:{height}", "-c:v", "libx264", "-preset", "veryfast",
-               "-crf", "23", "-pix_fmt", "yuv420p", "-movflags", "+faststart", self.path]
+               "-i", "pipe:0", "-vf", f"scale={width}:{height}", *h264_args(23), "-movflags", "+faststart", self.path]
         proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
         try:
             # Pre-roll: the remembered pictures, spaced as they arrived.
