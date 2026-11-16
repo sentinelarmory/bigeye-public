@@ -759,6 +759,7 @@ def trigger(name, info):
 # are online within seconds even if the PCs are taken or the power is cut; the finished clip follows.
 OFFSITE_ACTIVE = set()
 OFFSITE_MAX_S = 300
+ALARM_GRACE_S = 20   # coming home: wait this long for your phone or face before calling it an alarm
 
 
 def offsite_dir():
@@ -790,12 +791,23 @@ def offsite_copy(name, first_frame, event_name):
         return
     OFFSITE_ACTIVE.add(name)
     try:
+        before = list(CAMS[name].recent)         # keep what happened just before, while we wait
         stamp = datetime.datetime.now()
+        if event_name != "TEST":
+            for _ in range(ALARM_GRACE_S):
+                time.sleep(1)
+                if SETTINGS.get("_page", {}).get("home") and not is_night():
+                    log(f"{name}: not an alarm (Home mode came on: your phone or face)")
+                    return
+                found = (ADDON_STATUS.get(name, {}).get("ai") or {}).get("found") or []
+                if any(d.get("name") and not d.get("pet") for d in found):
+                    log(f"{name}: not an alarm (a known face)")
+                    return
         folder = os.path.join(root, stamp.strftime("%Y-%m-%d"), f"{stamp.strftime('%H%M%S')}-{name}-{event_name}")
         os.makedirs(folder, exist_ok=True)
         cam = CAMS[name]
         n = 0
-        for t, jpeg in list(cam.recent):  # what happened just before
+        for t, jpeg in before:  # what happened just before
             with open(os.path.join(folder, f"{name}-{datetime.datetime.fromtimestamp(t).strftime('%H%M%S-%f')[:-3]}-before.jpg"), "wb") as fh:
                 fh.write(jpeg)
         if first_frame:
@@ -880,6 +892,10 @@ class AddonContext:
     @staticmethod
     def page_settings():
         return SETTINGS.setdefault("_page", {})
+
+    @staticmethod
+    def phones_home():
+        return phones_home()
 
     @staticmethod
     def set_home(on, reason):
@@ -1056,6 +1072,28 @@ def save_devices(devices):
     with open(os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600), "w", encoding="utf-8") as handle:
         json.dump(devices, handle, indent=1)
     os.replace(tmp, DEVICES_FILE)
+
+
+# ── phone presence: the BigEye app says which Wi-Fi addresses it has on every poll ──────────
+# A phone with an address in the home network (bigeye.toml [app] home_prefix, e.g. "192.168.1.") is home.
+PRESENCE = {}   # device name -> {"t": time, "home": bool}
+PRESENCE_FRESH_S = 150
+
+
+def note_presence(device, wifi):
+    prefix = (CFG.get("app") or {}).get("home_prefix") or ""
+    if not device or wifi is None or not prefix:
+        return
+    addrs = [a.strip() for a in wifi.split(",") if a.strip()]
+    PRESENCE[device] = {"t": time.time(), "home": any(a.startswith(prefix) for a in addrs)}
+
+
+def phones_home():
+    """True: a paired phone is on the home Wi-Fi now; False: phones report, none is home; None: no phone reports."""
+    fresh = [p for p in PRESENCE.values() if time.time() - p["t"] < PRESENCE_FRESH_S]
+    if not fresh:
+        return None
+    return any(p["home"] for p in fresh)
 
 
 def device_for_key(key):
@@ -1825,9 +1863,13 @@ class AppHandler(Handler):
                 k, _, v = part.strip().partition("=")
                 if k == "bigeye_key":
                     key = v
-        if not device_for_key(key):
+        dev = device_for_key(key)
+        if not dev:
             time.sleep(0.5)
             return self._send(401, b"Sentinel-BigEye: this device is not paired. Open the BigEye app and pair it.")
+        note_presence(dev.get("name") if isinstance(dev, dict) else str(dev), self.headers.get("X-BigEye-Wifi"))
+        if SETTINGS.get("_page", {}).get("auto_home") and phones_home() and not SETTINGS.get("_page", {}).get("home"):
+            AddonContext.set_home(True, "auto: your phone is on the home Wi-Fi")   # at once, before any camera sees you
         return super().do_GET()
 
 

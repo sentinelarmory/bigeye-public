@@ -134,11 +134,23 @@ class Addon:
         if not page.get("auto_home"):
             return
         home = page.get("home", False)
-        if not home and now - self.last_known < 30:
-            self.ctx.set_home(True, "auto: a known face was seen")
+        phone = self.ctx.phones_home() if hasattr(self.ctx, "phones_home") else None
+        if not home and (now - self.last_known < 30 or phone):
+            self.ctx.set_home(True, "auto: " + ("your phone is on the home Wi-Fi" if phone else "a known face was seen"))
+            return
+        if phone:   # the phone is home: never go Away on cameras alone
+            self.phone_away_since = None
+            return
+        if phone is False:
+            self.phone_away_since = getattr(self, "phone_away_since", None) or now
+        else:
+            self.phone_away_since = None
         away_after = page.get("away_after_min", 45) * 60
         t, cam = self.last_person
         exits = page.get("exit_cams") or ["door"]   # cameras that see you leave (outside the door)
+        if home and getattr(self, "phone_away_since", None) and now - self.phone_away_since > away_after:
+            self.ctx.set_home(False, f"auto: your phone has been off the home Wi-Fi for {int((now - self.phone_away_since) / 60)} min")
+            return
         if home and t and now - t > away_after and cam in exits:
             self.ctx.set_home(False, f"auto: nobody seen for {int((now - t) / 60)} min, last person was at the {cam} camera")
 

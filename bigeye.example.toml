@@ -44,6 +44,8 @@ explorer = "/mnt/c/Windows/explorer.exe"       # WSL only: the folder buttons op
 # lon = 5.0
 
 [app]
+# A paired phone whose Wi-Fi address starts like this is home (automatic Home/Away), e.g. "192.168.1."
+home_prefix = ""
 # The address your phone uses to reach BigEye's phone-app listener (--app-port 8772),
 # shown on the page when you pair a phone. Your PC's LAN address, or its VPN address.
 # phone_url = "http://192.168.1.20:8772"

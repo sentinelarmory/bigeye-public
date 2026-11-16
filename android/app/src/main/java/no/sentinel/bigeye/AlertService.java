@@ -11,7 +11,11 @@ import android.content.pm.ServiceInfo;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.net.ConnectivityManager;
+import android.net.LinkAddress;
+import android.net.LinkProperties;
 import android.net.Network;
+import android.net.NetworkCapabilities;
+import android.net.NetworkRequest;
 import android.os.Build;
 import android.os.IBinder;
 
@@ -38,7 +42,7 @@ public class AlertService extends Service {
 
     private volatile boolean running;
     private Thread worker;
-    private ConnectivityManager.NetworkCallback netCallback;
+    private ConnectivityManager.NetworkCallback netCallback, wifiCallback;
     private String lastState = "";
 
     static void start(Context context) {
@@ -95,6 +99,7 @@ public class AlertService extends Service {
         if (worker != null) worker.interrupt();
         if (netCallback != null) {
             try { getSystemService(ConnectivityManager.class).unregisterNetworkCallback(netCallback); } catch (Exception ignored) { }
+            try { getSystemService(ConnectivityManager.class).unregisterNetworkCallback(wifiCallback); } catch (Exception ignored) { }
         }
         super.onDestroy();
     }
@@ -105,6 +110,37 @@ public class AlertService extends Service {
             @Override public void onAvailable(Network network) { if (worker != null) worker.interrupt(); }
         };
         try { getSystemService(ConnectivityManager.class).registerDefaultNetworkCallback(netCallback); } catch (Exception ignored) { }
+        // Wi-Fi on or off (also behind an always-on VPN): poll at once, so BigEye knows within seconds if you are home
+        wifiCallback = new ConnectivityManager.NetworkCallback() {
+            @Override public void onAvailable(Network network) { if (worker != null) worker.interrupt(); }
+            @Override public void onLost(Network network) { if (worker != null) worker.interrupt(); }
+        };
+        try {
+            getSystemService(ConnectivityManager.class).registerNetworkCallback(
+                    new NetworkRequest.Builder().addTransportType(NetworkCapabilities.TRANSPORT_WIFI).build(), wifiCallback);
+        } catch (Exception ignored) { }
+    }
+
+    /** The phone's own Wi-Fi IPv4 addresses (not the VPN's), sent to BigEye so it knows if you are home. */
+    @SuppressWarnings("deprecation")
+    static String wifiAddresses(Context ctx) {
+        StringBuilder out = new StringBuilder();
+        try {
+            ConnectivityManager cm = ctx.getSystemService(ConnectivityManager.class);
+            for (Network n : cm.getAllNetworks()) {
+                NetworkCapabilities caps = cm.getNetworkCapabilities(n);
+                if (caps == null || !caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) || caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN)) continue;
+                LinkProperties lp = cm.getLinkProperties(n);
+                if (lp == null) continue;
+                for (LinkAddress la : lp.getLinkAddresses()) {
+                    if (la.getAddress() instanceof java.net.Inet4Address) {
+                        if (out.length() > 0) out.append(',');
+                        out.append(la.getAddress().getHostAddress());
+                    }
+                }
+            }
+        } catch (Exception ignored) { }
+        return out.toString();
     }
 
     private void loop() {
@@ -114,6 +150,7 @@ public class AlertService extends Service {
             try {
                 long after = prefs.lastAlert();
                 String q = after < 0 ? "after=-1" : "after=" + after + "&wait=50";
+                WIFI = wifiAddresses(this);
                 JSONObject r = new JSONObject(new String(get(prefs, "/app/alerts?" + q, 70_000), StandardCharsets.UTF_8));
                 long last = r.getLong("last");
                 if (after >= 0) {
@@ -179,12 +216,14 @@ public class AlertService extends Service {
     }
 
     static final class NotPaired extends Exception { }
+    static volatile String WIFI = "";
 
     static byte[] get(Prefs prefs, String path, int readTimeout) throws Exception {
         HttpURLConnection c = (HttpURLConnection) new URL(prefs.url() + path).openConnection();
         c.setConnectTimeout(8_000);
         c.setReadTimeout(readTimeout);
         c.setRequestProperty("X-BigEye-Key", prefs.key());
+        c.setRequestProperty("X-BigEye-Wifi", WIFI);   // "" = not on Wi-Fi (BigEye: not home)
         try {
             int code = c.getResponseCode();
             if (code == 401) throw new NotPaired();
