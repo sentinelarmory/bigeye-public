@@ -283,11 +283,54 @@ CLOCK_BOX = {"cam360": (0.735, 0.03, 0.26, 0.075)}
 
 
 PHONE_STATUS = {}   # camera name -> the BigEye Cam app's /status (battery, charging, size, fps), refreshed every 15 s
+# Battery trend while on the charger: a camera that loses % although it "charges" gets too little power.
+BATT_HIST = {}      # camera name -> deque of (time, percent, charging)
+POWER_WARNED = {}   # camera name -> when the owner was last told
+
+
+def note_battery(name, pct, charging):
+    if pct is None:
+        return
+    h = BATT_HIST.setdefault(name, collections.deque(maxlen=400))
+    h.append((time.time(), float(pct), bool(charging)))
+
+
+def power_warning(name):
+    """None, or {"per_h": %/h (negative), "empty_min": minutes} when the battery falls while on the charger."""
+    now = time.time()
+    pts = [(t, p) for t, p, c in BATT_HIST.get(name, ()) if now - t < 45 * 60]
+    if len(pts) < 6 or pts[-1][0] - pts[0][0] < 12 * 60 or not BATT_HIST[name][-1][2]:
+        return None
+    n = len(pts)
+    mt, mp = sum(t for t, _ in pts) / n, sum(p for _, p in pts) / n
+    var = sum((t - mt) ** 2 for t, _ in pts)
+    if not var:
+        return None
+    slope_h = sum((t - mt) * (p - mp) for t, p in pts) / var * 3600   # % per hour
+    if slope_h > -1.0 or pts[0][1] - pts[-1][1] < 2:                 # steady or rising (or just noise)
+        return None
+    return {"per_h": round(slope_h, 1), "empty_min": int(pts[-1][1] / -slope_h * 60)}
 
 
 def phone_watch():
     """Phones running BigEye Cam: read their status next to the picture (no control service of their own)."""
     while True:
+        for name in [n for n in CAMS if "pir" in FEATURES.get(n, ()) and n in CONTROLS]:   # battery cameras (W2)
+            try:
+                with urllib.request.urlopen(f"{CONTROLS[name]}/status", timeout=3) as r:
+                    st = json.load(r)
+                if st.get("status_seen"):
+                    note_battery(name, st.get("battery_pct"), st.get("charging"))
+            except Exception:
+                pass
+        for name in list(BATT_HIST):   # tell the owner once a day per camera
+            w = power_warning(name)
+            if w and time.time() - POWER_WARNED.get(name, 0) > 86400:
+                POWER_WARNED[name] = time.time()
+                h, m = divmod(w["empty_min"], 60)
+                push_alert(f"{cam_label(name)}: too little power", f"The {cam_label(name)} camera loses {-w['per_h']} % an hour "
+                           f"although it is on the charger; empty in about {h} h {m} min. Give it a stronger charger or its own.",
+                           "action", name)
         for name, cam in list(CAMS.items()):
             if name in CONTROLS or not str(cam.url).endswith("/cam.mjpg"):
                 continue
@@ -297,6 +340,7 @@ def phone_watch():
                 if st.get("app") == "BigEye Cam":
                     st["t"] = time.time()
                     PHONE_STATUS[name] = st
+                    note_battery(name, st.get("battery_pct"), st.get("charging"))
             except Exception:
                 pass
         time.sleep(15)
@@ -1267,6 +1311,10 @@ class Handler(BaseHTTPRequestHandler):
                                "refs": sum(os.path.exists(ref_path(name, x["name"])) for x in p["presets"])}
                 if st.get("follow"):
                     item["follow"] = st["follow"]
+            w = power_warning(name)
+            if w:
+                h, m = divmod(w["empty_min"], 60)
+                item["power_warn"] = f"needs more power · empty in ~{h} h {m:02d} min"
             ph = PHONE_STATUS.get(name)
             if ph and now - ph.get("t", 0) < 60:   # a phone camera (BigEye Cam): battery, charging, picture size
                 item["phone"] = True

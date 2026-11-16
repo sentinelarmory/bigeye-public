@@ -1005,6 +1005,8 @@ function poll() {
       var hasBattery = s.phone || CAMS.filter(function (c) { return c.name === n && has(c, 'pir'); }).length > 0;   // W2 and phone cameras
       if (!hasBattery) { s.battery = null; card.meta.textContent = s.media || ''; }
       card.querySelector('.infopill').textContent = hasBattery && s.battery !== undefined && s.battery !== null ? (s.charging ? '⚡ ' : '🔋 ') + s.battery + '%' : '';
+      if (s.power_warn) { card.meta.textContent = '⚠ ' + s.power_warn + '   ' + card.meta.textContent; card.meta.style.color = '#ff8a7a'; card.meta.title = 'The battery falls although it is charging: the charger or cable gives too little power'; }
+      else { card.meta.style.color = ''; card.meta.title = ''; }
       if (s.ptz) showPos(n, s.ptz);
       var fs = document.getElementById('follow-' + n); if (fs) fs.textContent = s.follow ? '● ' + s.follow : '';
       var rw = document.getElementById('restartwarn-' + n);
