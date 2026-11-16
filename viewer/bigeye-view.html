@@ -1002,7 +1002,7 @@ function poll() {
       if (s.media) m.push(s.media);
       card.meta.textContent = m.join('   ');
       // Battery only for the battery camera (window, W2); the door camera always says 100 %.
-      var hasBattery = CAMS.filter(function (c) { return c.name === n && has(c, 'pir'); }).length > 0;
+      var hasBattery = s.phone || CAMS.filter(function (c) { return c.name === n && has(c, 'pir'); }).length > 0;   // W2 and phone cameras
       if (!hasBattery) { s.battery = null; card.meta.textContent = s.media || ''; }
       card.querySelector('.infopill').textContent = hasBattery && s.battery !== undefined && s.battery !== null ? (s.charging ? '⚡ ' : '🔋 ') + s.battery + '%' : '';
       if (s.ptz) showPos(n, s.ptz);

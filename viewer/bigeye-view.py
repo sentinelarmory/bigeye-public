@@ -1241,6 +1241,7 @@ class Handler(BaseHTTPRequestHandler):
                     item["follow"] = st["follow"]
             ph = PHONE_STATUS.get(name)
             if ph and now - ph.get("t", 0) < 60:   # a phone camera (BigEye Cam): battery, charging, picture size
+                item["phone"] = True
                 item["battery"] = ph.get("battery_pct")
                 item["charging"] = ph.get("charging")
                 item["media"] = f'MJPEG {ph.get("width")}x{ph.get("height")} · {ph.get("model", "phone")}'
