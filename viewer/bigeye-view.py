@@ -316,6 +316,18 @@ def note_battery(name, pct, charging):
     h.append((time.time(), float(pct), bool(charging)))
 
 
+def battery_trend(name):
+    """% per hour over the last 45 min (None until there are 12 min of readings)."""
+    now = time.time()
+    pts = [(t, p) for t, p, c in BATT_HIST.get(name, ()) if now - t < 45 * 60]
+    if len(pts) < 6 or pts[-1][0] - pts[0][0] < 12 * 60:
+        return None
+    n = len(pts)
+    mt, mp = sum(t for t, _ in pts) / n, sum(p for _, p in pts) / n
+    var = sum((t - mt) ** 2 for t, _ in pts)
+    return sum((t - mt) * (p - mp) for t, p in pts) / var * 3600 if var else None
+
+
 def power_warning(name):
     """None, or {"per_h": %/h (negative), "empty_min": minutes} when the battery falls while on the charger."""
     now = time.time()
@@ -1338,6 +1350,17 @@ class Handler(BaseHTTPRequestHandler):
             if w:
                 h, m = divmod(w["empty_min"], 60)
                 item["power_warn"] = f"needs more power · empty in ~{h} h {m:02d} min"
+            elif name in BATT_HIST:   # the calm states, so you can see it is watched
+                tr = battery_trend(name)
+                last = BATT_HIST[name][-1] if BATT_HIST[name] else None
+                if tr is None:
+                    item["power_ok"] = "power: measuring"
+                elif last and last[1] >= 99:
+                    item["power_ok"] = "power OK · full"
+                elif tr >= 0.5:
+                    item["power_ok"] = f"power OK · +{tr:.0f} %/h"
+                else:
+                    item["power_ok"] = "power OK · steady"
             ph = PHONE_STATUS.get(name)
             if ph and now - ph.get("t", 0) < 60:   # a phone camera (BigEye Cam): battery, charging, picture size
                 item["phone"] = True
