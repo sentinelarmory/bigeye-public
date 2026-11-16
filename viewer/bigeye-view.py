@@ -282,6 +282,26 @@ MOTION_PREROLL = 3
 CLOCK_BOX = {"cam360": (0.735, 0.03, 0.26, 0.075)}
 
 
+PHONE_STATUS = {}   # camera name -> the BigEye Cam app's /status (battery, charging, size, fps), refreshed every 15 s
+
+
+def phone_watch():
+    """Phones running BigEye Cam: read their status next to the picture (no control service of their own)."""
+    while True:
+        for name, cam in list(CAMS.items()):
+            if name in CONTROLS or not str(cam.url).endswith("/cam.mjpg"):
+                continue
+            try:
+                with urllib.request.urlopen(cam.url[: -len("cam.mjpg")] + "status", timeout=4) as r:
+                    st = json.load(r)
+                if st.get("app") == "BigEye Cam":
+                    st["t"] = time.time()
+                    PHONE_STATUS[name] = st
+            except Exception:
+                pass
+        time.sleep(15)
+
+
 def cam_label(name):
     """The name the owner gave the camera on the page (settings keep the internal name, so nothing is lost)."""
     return (SETTINGS.get(name, {}) or {}).get("label") or name.capitalize()
@@ -1219,6 +1239,11 @@ class Handler(BaseHTTPRequestHandler):
                                "refs": sum(os.path.exists(ref_path(name, x["name"])) for x in p["presets"])}
                 if st.get("follow"):
                     item["follow"] = st["follow"]
+            ph = PHONE_STATUS.get(name)
+            if ph and now - ph.get("t", 0) < 60:   # a phone camera (BigEye Cam): battery, charging, picture size
+                item["battery"] = ph.get("battery_pct")
+                item["charging"] = ph.get("charging")
+                item["media"] = f'MJPEG {ph.get("width")}x{ph.get("height")} · {ph.get("model", "phone")}'
             base = CONTROLS.get(name)
             if base:
                 try:
@@ -1937,6 +1962,7 @@ def main():
     threading.Thread(target=watch_restarts, daemon=True).start()
     threading.Thread(target=story_at_night, daemon=True).start()
     threading.Thread(target=camera_watch, daemon=True).start()
+    threading.Thread(target=phone_watch, daemon=True).start()
     print(f"Sentinel-BigEye: http://localhost:{args.port}/")
     if args.app_port:
         app_server = ThreadingHTTPServer((args.app_bind, args.app_port), AppHandler)
