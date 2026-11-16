@@ -9,14 +9,27 @@ setting asks for calls ctx.trigger(name, {"source": "ai", "label": ...}).
 Nothing leaves this PC.
 """
 import json
+import os
 import threading
 import time
 import urllib.request
 
 SERVICE = "http://127.0.0.1:8771"
+# The camera machine's own graphics card (the camera machine, GTX 1060) does door and window, reached through the tablet path
+# (127.0.0.1:18771). If it does not answer, this PC's AI takes over at once and the camera machine is tried again after a minute.
+# Faces stay on this PC: when the camera machine sees a person, this PC is asked once more for names (and the stranger gallery).
+REMOTE = os.environ.get("BIGEYE_AI_REMOTE", "http://127.0.0.1:18771")
+REMOTE_CAMS = {c for c in os.environ.get("BIGEYE_AI_REMOTE_CAMS", "door,window").split(",") if c}
+REMOTE_RETRY_S = 60
 INTERVAL = 0.5
 MIN_SCORE = {"person": 0.55, "cat": 0.45, "dog": 0.45}
 WANTS = {"person": {"person"}, "person_animal": {"person", "cat", "dog"}, "animal": {"cat", "dog"}}
+
+
+def ask(base, jpeg, faces, timeout=3):
+    req = urllib.request.Request(f"{base}/detect?faces={1 if faces else 0}", data=jpeg, headers={"Content-Type": "image/jpeg"})
+    with urllib.request.urlopen(req, timeout=timeout) as reply:
+        return json.load(reply)
 
 
 def iou(a, b):
@@ -68,6 +81,7 @@ class Addon:
         cam, last, down_since = self.ctx.cams[name], 0.0, None
         named = []  # [{"box", "name", "t"}]: people recognised lately, so the name follows them
         statics = []  # [{"label", "box", "first", "seen", "best"}]: unsure finds that never move (shoes "cat")
+        remote_retry_at = 0  # the camera machine's AI: 0 = use it; else the time to try it again
         while True:
             slow = self.ctx.page_settings().get("ai_mode") == "cpu" if hasattr(self.ctx, "page_settings") else False
             time.sleep(INTERVAL * 4 if slow else INTERVAL)  # guard's slow mode: fewer pictures, no faces
@@ -81,9 +95,24 @@ class Addon:
             if self.ctx.quiet(name):  # turning: the picture is a blur
                 continue
             try:
-                req = urllib.request.Request(f"{SERVICE}/detect?faces={0 if slow else 1}", data=cam.frame, headers={"Content-Type": "image/jpeg"})
-                with urllib.request.urlopen(req, timeout=3) as reply:
-                    found = json.load(reply)
+                found = None
+                if name in REMOTE_CAMS and REMOTE and time.time() >= remote_retry_at:
+                    try:
+                        found = ask(REMOTE, cam.frame, faces=False, timeout=2)
+                        if remote_retry_at:
+                            self.ctx.log(f"{name}: the camera machine's AI answering again")
+                        remote_retry_at = 0
+                        status["ai_host"] = "the camera machine"
+                        if not slow and any(d.get("label") == "person" and d.get("score", 0) >= 0.5 for d in found):
+                            found = ask(SERVICE, cam.frame, faces=True)   # names come from this PC
+                    except Exception as error:
+                        if not remote_retry_at:
+                            self.ctx.log(f"{name}: the camera machine's AI not answering ({error}); this PC's AI takes over")
+                        remote_retry_at = time.time() + REMOTE_RETRY_S
+                        found = None
+                if found is None:
+                    found = ask(SERVICE, cam.frame, faces=not slow)
+                    status["ai_host"] = "this PC"
                 if down_since:
                     self.ctx.log("AI service answering again")
                 down_since = None

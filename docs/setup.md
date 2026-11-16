@@ -70,7 +70,8 @@ uv pip install -p /tmp/export/bin/python ultralytics onnxslim \
 
 **Older NVIDIA cards (GTX 10-series, Pascal):** the newest `onnxruntime-gpu` is built for CUDA 13, which no longer
 supports them ("CUBLAS failure 8: architectural feature absent"). Install `"onnxruntime-gpu[cuda,cudnn]==1.22.0"`
-(CUDA 12) instead; a GTX 1060 then runs RF-DETR Small in about 15 ms per picture.
+(CUDA 12) and `nvidia-cudnn-cu12==9.5.1.17` (newer cuDNN 9.x fails on these cards with "CUDNN_FE failure 11");
+a GTX 1060 then runs RF-DETR Small in about 56 ms per picture.
 
 Face models (YuNet + SFace, about 40 MB, used by default):
 
