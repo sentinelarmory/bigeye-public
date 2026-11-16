@@ -972,8 +972,25 @@ def device_for_key(key):
 def camera_watch():
     """A camera that was live and has been gone for 10 minutes is worth an alert (once, until it is back)."""
     since, ever, told = {}, set(), set()
+    battery_log = os.path.expanduser("~/.cache/sentinel-bigeye-battery.csv")  # to see if a camera's power sags before it hangs
+    last_battery = 0
     while True:
         now = time.time()
+        if now - last_battery >= 60:
+            last_battery = now
+            for name in [n for n in CAMS if "pir" in FEATURES.get(n, ())]:  # battery cameras (window, W2)
+                try:
+                    with urllib.request.urlopen(f"{CONTROLS[name]}/status", timeout=2) as r:
+                        st = json.load(r)
+                    age = round(now - CAMS[name].stamp, 1) if CAMS[name].stamp else -1
+                    new = not os.path.exists(battery_log)
+                    with open(battery_log, "a", encoding="utf-8") as handle:
+                        if new:
+                            handle.write("time,camera,battery_pct,battery_mv,charging,picture_age_s\n")
+                        handle.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')},{name},{st.get('battery_pct')},{st.get('battery_mv')},"
+                                     f"{int(bool(st.get('charging')))},{age}\n")
+                except Exception:
+                    pass
         for name, cam in CAMS.items():
             live = cam.stamp and now - cam.stamp < 15
             if live:
