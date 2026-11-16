@@ -111,6 +111,9 @@ section.strip{padding:6px 16px 16px}section.strip h2{font-size:14px;color:var(--
 <h3 style="margin-top:6px">👑 Faces it knows</h3><div id="faces" class="chips"></div>
 <div class="row"><input id="facename" class="btn" placeholder="Name, e.g. Alex" style="flex:1;min-width:160px"><select id="facecam" class="btn"></select>
 <button class="btn" id="facelearn">Learn this face</button></div>
+<h3 style="margin-top:6px">🕵️ People it has seen, not named yet</h3>
+<div class="hint">Clear faces that match nobody are grouped by person. Name a group to make it a known face; × forgets it. Groups not seen for 30 days are dropped. Kept only on this PC.</div>
+<div id="strangers" style="display:flex;flex-wrap:wrap;gap:10px;margin:6px 0"></div>
 <div class="hint">Stand alone in view of that camera and look toward it now and then. It takes 15 pictures over about 20 s; more sessions (other places, with and without cap) make it better. Faces are stored only on this PC, as numbers.</div></div>
 <main id="grid"></main>
 <section class="strip" id="mv" hidden><h2>Motion events <span class="hint">described by the local AI · click the picture or clip</span>
@@ -433,16 +436,18 @@ function motionPanel(c, card) {
   var lookSeg = seg([{label: 'People and animals', v: 'all'}, {label: 'People only', v: 'people'}], function (o) {
     return saveMotion(cam, {look_for: o.v}).then(function (ok) { if (ok) toast(title(cam) + ': the AI looks for ' + o.label.toLowerCase(), 'ok'); return ok; }); });
   var knownSeg = seg([{label: 'Don\'t record them', v: true}, {label: 'Record them too', v: false}], function (o) { return saveMotion(cam, {skip_known: o.v}); });
+  var homeSeg = seg([{label: 'Pause', v: false}, {label: 'Keep recording', v: true}], function (o) {
+    return saveMotion(cam, {at_home: o.v}).then(function (ok) { if (ok) toast(title(cam) + (o.v ? ': records in Home mode too' : ': pauses in Home mode'), 'ok'); return ok; }); });
   var phone = seg([{label: 'Phone message', v: true}, {label: 'No message', v: false}], function (o) { return saveMotion(cam, {notify: o.v}); });
   json('/settings/' + cam).then(function (m) {
     MOTION[cam] = m; onoff.set(m.on ? 'On' : 'Off'); sens.setValue(m.sens);
     whenSeg.set(REC_ON.filter(function (o) { return o.v === m.record_on; })[0].label);
     lookSeg.set(m.look_for === 'people' ? 'People only' : 'People and animals');
-    recSeg.set(m.record === false ? 'Don\'t record' : 'Record'); knownSeg.set(m.skip_known === false ? 'Record them too' : 'Don\'t record them'); phone.set(m.notify ? 'Phone message' : 'No message'); drawZones(cam);
+    recSeg.set(m.record === false ? 'Don\'t record' : 'Record'); knownSeg.set(m.skip_known === false ? 'Record them too' : 'Don\'t record them'); phone.set(m.notify ? 'Phone message' : 'No message'); homeSeg.set(m.at_home ? 'Keep recording' : 'Pause'); drawZones(cam);
   });
   zoneEditor(cam, card);
   return el('div', {'class': 'panel', style: 'padding:0;gap:10px'}, [
-    row('Motion sensor', [onoff, meter]), row('AI looks for', [lookSeg]), row('Record when', [whenSeg]),
+    row('Motion sensor', [onoff, meter]), row('AI looks for', [lookSeg]), row('Record when', [whenSeg]), row('In Home mode', [homeSeg]),
     el('div', {'class': 'hint', text: 'Movement wakes it up; the AI (on this PC) checks what it is. A person on the TV counts too: draw an ignore zone over the TV.'}), sens,
     row('Ignore zones', [drawBtn, toolSeg(), el('button', {'class': 'btn', text: 'Clear all', onclick: function () {
       if (confirm('Remove all ignore zones on ' + cam + '?')) saveMotion(cam, {zones: []}); }}), el('span', {'class': 'hint zonecount'})]),
@@ -848,6 +853,29 @@ function loadFaces() {
     if (!Object.keys(f).length) box.appendChild(el('span', {'class': 'hint', text: 'None yet.'}));
   }).catch(function () {});
 }
+function loadStrangers() {
+  json('/faces/unknown').then(function (r) {
+    var box = document.getElementById('strangers'); box.innerHTML = '';
+    (r.groups || []).forEach(function (g) {
+      var input = el('input', {'class': 'btn', placeholder: 'Name', style: 'width:110px'});
+      var save = el('button', {'class': 'btn', text: 'Save', onclick: function () {
+        var n = input.value.trim(); if (!n) { toast('Write a name first', 'bad'); return; }
+        json('/faces/unknown/name?id=' + encodeURIComponent(g.id) + '&name=' + encodeURIComponent(n), {method: 'POST'}).then(function (x) {
+          toast(x.error ? x.error : '👑 ' + n + ' is now a known face', x.error ? 'bad' : 'ok'); loadStrangers(); loadFaces(); });
+      }});
+      var forget = el('button', {'class': 'btn', text: '×', title: 'Forget this person', onclick: function () {
+        if (forget.dataset.sure) { json('/faces/unknown/delete?id=' + encodeURIComponent(g.id), {method: 'POST'}).then(loadStrangers); return; }
+        forget.dataset.sure = 1; forget.textContent = 'Sure?'; setTimeout(function () { delete forget.dataset.sure; forget.textContent = '×'; }, 3000);
+      }});
+      var seen = new Date(g.last * 1000).toLocaleString().slice(0, 17);
+      box.appendChild(el('div', {style: 'display:grid;gap:4px;width:150px;background:var(--card2);border:1px solid var(--line);border-radius:10px;padding:6px'}, [
+        el('img', {src: '/faces/unknown/picture?id=' + encodeURIComponent(g.id), style: 'width:100%;aspect-ratio:1;object-fit:cover;border-radius:6px', alt: 'unknown person'}),
+        el('span', {'class': 'hint', text: g.count + '× · last ' + seen}), el('div', {'class': 'row', style: 'gap:4px'}, [input, save, forget])]));
+    });
+    if (!(r.groups || []).length) box.appendChild(el('span', {'class': 'hint', text: 'Nobody yet.'}));
+  }).catch(function () {});
+}
+loadStrangers();
 CAMS.forEach(function (c) { document.getElementById('facecam').appendChild(el('option', {value: c.name, text: title(c.name)})); });
 loadFaces();
 json('/pets').then(function (p) { document.getElementById('catname').value = p.cat || ''; });

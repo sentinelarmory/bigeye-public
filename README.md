@@ -58,7 +58,7 @@ the cameras make to reach their vendor.
 | **Record** | snapshots and H.264 MP4 on your own disk; motion clips start 3 s before the alarm |
 | **Motion + AI** | a light motion sensor wakes the detector: person, cat, dog; ignore zones (per 360 position) |
 | **Detector failover** | a list of detectors tried in order (default RF-DETR, Apache-2.0, then optional YOLO11): a model that fails, slows down or loses the GPU is swapped at once, and the first is tried again every 10 minutes |
-| **Faces and pets** | known faces get their name and are not recorded; strangers are; your cat gets its name |
+| **Faces and pets** | known faces get their name and are not recorded; strangers are, and their faces are grouped by person so you can name a regular visitor with one click (kept on your machine, dropped after 30 days unseen); your cat gets its name |
 | **360 control** | absolute positions (save any spot), real night mode, quality, BigEye follow that learns your mounting |
 | **Self-healing** | auto-reconnect after 90 s without picture, "Reconnect cameras", Home / Away |
 | **Call-home monitor** | a live tab that counts and explains every attempt to reach the vendor clouds, with printable reports |
@@ -124,8 +124,10 @@ version as a service, share your changes too. Contributions: see [CONTRIBUTING.m
 - Detection: [RF-DETR](https://github.com/roboflow/rf-detr) by Roboflow (Apache-2.0, the default) and, optionally,
   [Ultralytics YOLO11](https://github.com/ultralytics/ultralytics) (AGPL-3.0) as a fallback. Export the models
   yourself (see setup); no weights are in this repo.
-- Faces: [InsightFace](https://github.com/deepinsight/insightface) `buffalo_l`, downloaded at first use;
-  **its pretrained models are for non-commercial research use only.**
+- Faces (default): [YuNet](https://github.com/opencv/opencv_zoo/tree/main/models/face_detection_yunet) (MIT) and
+  [SFace](https://github.com/opencv/opencv_zoo/tree/main/models/face_recognition_sface) (Apache-2.0) from OpenCV Zoo,
+  free for closed products too. Optional: [InsightFace](https://github.com/deepinsight/insightface) `buffalo_l`
+  (`BIGEYE_FACES=insightface`); **its pretrained models are for non-commercial research use only.**
 - 360 camera command ids: the public notes in [jphein/eyeplus-icam365-camera](https://github.com/jphein/eyeplus-icam365-camera)
   helped decode them; the bridge here is our own code.
 - RTSP: [bluenviron/gortsplib](https://github.com/bluenviron/gortsplib) and [pion](https://github.com/pion) (MIT) · GPU runtime: [onnxruntime](https://github.com/microsoft/onnxruntime) (MIT).

@@ -33,10 +33,23 @@ RETRY_FIRST_S = 600                                           # try the first mo
 # The kinds of things we care about, by name (each model has its own class numbering).
 WANTED_NAMES = ("person", "cat", "dog", "bird", "car", "tv", "laptop")  # tv/laptop: people on screens are not people
 MIN_SCORE = 0.35
-FACES_FILE = os.path.expanduser("~/.config/sentinel-bigeye/faces.json")  # name -> list of face fingerprints
-FACE_MATCH = 0.40      # cosine similarity needed to call a face by name (ArcFace: 0.4 is a common cut)
+# Face engine: "sface" = OpenCV Zoo YuNet (MIT) + SFace (Apache-2.0), free for closed products (default);
+# "insightface" = buffalo_l, better by a hair but its pretrained models are for NON-COMMERCIAL use only.
+# Each engine has its own fingerprints (they are not compatible), so each has its own faces file.
+FACE_ENGINE = os.environ.get("BIGEYE_FACES", "sface")
+FACES_FILE = os.path.expanduser("~/.config/sentinel-bigeye/" + ("faces.json" if FACE_ENGINE == "insightface" else "faces-sface.json"))
+FACE_MATCH = 0.40 if FACE_ENGINE == "insightface" else 0.363  # cosine for "same person" (SFace: OpenCV's own cut)
+FACE_DIM = 512 if FACE_ENGINE == "insightface" else 128
 FACE_MIN_DET = 0.55    # how sure the face finder must be that it is a face
 MAX_SAMPLES = 60
+# Strangers: faces that match nobody are grouped (same person = cosine >= UNKNOWN_SAME) so the owner can name a
+# repeat visitor with one click. Kept on this machine only; a group not seen for UNKNOWN_KEEP_DAYS is dropped.
+UNKNOWN_DIR = os.path.expanduser("~/.local/share/sentinel-bigeye/unknown-faces")
+UNKNOWN_SAME = 0.42 if FACE_ENGINE == "sface" else 0.45
+UNKNOWN_MIN_DET = 0.80     # only clear faces go into the gallery
+UNKNOWN_MIN_PX = 40        # face at least this wide (pixels)
+UNKNOWN_KEEP_DAYS = 30
+UNKNOWN_MAX = 200          # groups at most (the oldest unnamed go first)
 
 try:  # CUDA libraries shipped as pip wheels (nvidia-*), if installed
     ort.preload_dlls()
@@ -200,9 +213,32 @@ _FACE_APP = None
 FACE_LOCK = threading.Lock()
 
 
+class SFaceApp:
+    """YuNet (finds faces) + SFace (128-number fingerprint) from OpenCV Zoo, on the processor (a few ms)."""
+    def __init__(self):
+        import cv2
+        m = os.path.expanduser("~/.local/share/sentinel-bigeye/models/")
+        self.cv2 = cv2
+        self.det = cv2.FaceDetectorYN.create(m + "face_detection_yunet_2023mar.onnx", "", (320, 320), FACE_MIN_DET, 0.3, 50)
+        self.rec = cv2.FaceRecognizerSF.create(m + "face_recognition_sface_2021dec.onnx", "")
+
+    def get(self, crop):
+        self.det.setInputSize((crop.shape[1], crop.shape[0]))
+        _, faces = self.det.detect(crop)
+        out = []
+        for f in (faces if faces is not None else []):
+            emb = self.rec.feature(self.rec.alignCrop(crop, f)).flatten().astype(np.float32)
+            emb /= (np.linalg.norm(emb) or 1.0)
+            x, y, fw, fh = (float(v) for v in f[:4])
+            out.append(type("Face", (), {"det_score": float(f[14]), "bbox": [x, y, x + fw, y + fh], "normed_embedding": emb}))
+        return out
+
+
 def face_app():
-    """InsightFace buffalo_l (face finder + fingerprint), loaded on first use."""
+    """The face engine (see FACE_ENGINE), loaded on first use."""
     global _FACE_APP
+    if _FACE_APP is None and FACE_ENGINE == "sface":
+        _FACE_APP = SFaceApp()
     if _FACE_APP is None:
         from insightface.app import FaceAnalysis
         app = FaceAnalysis(name="buffalo_l", allowed_modules=["detection", "recognition"],
@@ -249,6 +285,7 @@ def face_in(img_bgr, box, w, h):
     emb = f.normed_embedding.astype(np.float32)
     fb = f.bbox
     return {"emb": emb, "det": float(f.det_score),
+            "px": [int(cx0 + fb[0]), int(cy0 + fb[1]), int(cx0 + fb[2]), int(cy0 + fb[3])],
             "box": [round(float(cx0 + fb[0]) / w, 4), round(float(cy0 + fb[1]) / h, 4),
                     round(float(cx0 + fb[2]) / w, 4), round(float(cy0 + fb[3]) / h, 4)]}
 
@@ -336,6 +373,95 @@ def detect(jpeg, min_score=MIN_SCORE):
     return sorted(found, key=lambda d: -d["score"]), img
 
 
+UNKNOWN = {}   # id -> {"embs": array, "count", "first", "last", "best"}
+UNKNOWN_LOCK = threading.Lock()
+
+
+def load_unknown():
+    try:
+        with open(os.path.join(UNKNOWN_DIR, "index.json")) as handle:
+            for k, v in json.load(handle).items():
+                UNKNOWN[k] = dict(v, embs=np.asarray(v["embs"], np.float32))
+    except (OSError, ValueError):
+        pass
+
+
+def save_unknown():
+    os.makedirs(UNKNOWN_DIR, mode=0o700, exist_ok=True)
+    tmp = os.path.join(UNKNOWN_DIR, "index.json.tmp")
+    with open(tmp, "w") as handle:
+        json.dump({k: dict(v, embs=v["embs"].round(5).tolist()) for k, v in UNKNOWN.items()}, handle)
+    os.replace(tmp, os.path.join(UNKNOWN_DIR, "index.json"))
+    os.chmod(os.path.join(UNKNOWN_DIR, "index.json"), 0o600)
+
+
+def remember_stranger(f, bgr):
+    """Put a clear face that matched nobody into its group (or a new one); keep the best picture of each group."""
+    fx0, fy0, fx1, fy1 = f["px"]
+    if f["det"] < UNKNOWN_MIN_DET or fx1 - fx0 < UNKNOWN_MIN_PX:
+        return
+    now = time.time()
+    with UNKNOWN_LOCK:
+        best_id, best_sim = None, 0.0
+        for gid, g in UNKNOWN.items():
+            sim = float((g["embs"] @ f["emb"]).max())
+            if sim > best_sim:
+                best_id, best_sim = gid, sim
+        if best_id and best_sim >= UNKNOWN_SAME:
+            g = UNKNOWN[best_id]
+            if now - g["last"] < 10:        # same visit: at most one sample per 10 s
+                g["last"] = now
+                return
+            g["embs"] = np.vstack([g["embs"], f["emb"][None]])[-12:]
+            g["count"] += 1
+            g["last"] = now
+            gid = best_id
+        else:
+            gid = time.strftime("%Y%m%d-%H%M%S") + f"-{int(now * 1000) % 1000:03d}"
+            g = UNKNOWN[gid] = {"embs": f["emb"][None], "count": 1, "first": now, "last": now, "best": 0.0}
+        quality = f["det"] * (fx1 - fx0)
+        if quality > g["best"]:             # keep the clearest picture, a little wider than the face
+            import cv2
+            h, w = bgr.shape[:2]
+            pad = int((fx1 - fx0) * 0.35)
+            crop = bgr[max(0, fy0 - pad):min(h, fy1 + pad), max(0, fx0 - pad):min(w, fx1 + pad)]
+            if crop.size:
+                os.makedirs(UNKNOWN_DIR, mode=0o700, exist_ok=True)
+                cv2.imwrite(os.path.join(UNKNOWN_DIR, gid + ".jpg"), crop)
+                g["best"] = quality
+        # housekeeping: forget old, rarely seen groups; cap the total
+        for k in [k for k, v in UNKNOWN.items() if now - v["last"] > UNKNOWN_KEEP_DAYS * 86400]:
+            drop_unknown(k)
+        while len(UNKNOWN) > UNKNOWN_MAX:
+            drop_unknown(min(UNKNOWN, key=lambda k: (UNKNOWN[k]["count"], UNKNOWN[k]["last"])))
+        save_unknown()
+
+
+def drop_unknown(gid):
+    UNKNOWN.pop(gid, None)
+    try:
+        os.remove(os.path.join(UNKNOWN_DIR, gid + ".jpg"))
+    except OSError:
+        pass
+
+
+def name_unknown(gid, name):
+    """The owner names a group: its fingerprints join that name's known faces."""
+    with UNKNOWN_LOCK:
+        g = UNKNOWN.get(gid)
+        if not g:
+            return {"error": "no such group"}
+        samples = KNOWN.get(name, np.zeros((0, FACE_DIM), np.float32))
+        KNOWN[name] = np.vstack([samples, g["embs"]])[-MAX_SAMPLES:]
+        save_faces()
+        drop_unknown(gid)
+        save_unknown()
+    return {"name": name, "samples": int(len(KNOWN[name]))}
+
+
+load_unknown()
+
+
 def detect_with_faces(jpeg, faces=False):
     found, img = detect(jpeg)
     if not faces:
@@ -356,6 +482,11 @@ def detect_with_faces(jpeg, faces=False):
             d.update(face=f["box"], face_score=round(f["det"], 2), similarity=round(sim, 2))
             if name:
                 d["name"] = name
+            else:
+                try:
+                    remember_stranger(f, bgr)
+                except Exception as error:
+                    d["gallery_error"] = str(error)[:80]
     return found
 
 
@@ -369,7 +500,7 @@ def enroll(jpeg, name):
     f = face_in(np.asarray(img)[:, :, ::-1].copy(), people[0]["box"], w, h)
     if not f:
         return {"error": "no clear face: look toward the camera"}
-    samples = KNOWN.get(name, np.zeros((0, 512), np.float32))
+    samples = KNOWN.get(name, np.zeros((0, FACE_DIM), np.float32))
     KNOWN[name] = np.vstack([samples, f["emb"][None]])[-MAX_SAMPLES:]
     save_faces()
     return {"name": name, "samples": int(len(KNOWN[name])), "face_score": round(f["det"], 2)}
@@ -391,7 +522,31 @@ class Handler(BaseHTTPRequestHandler):
         if self.path.startswith("/status"):
             d = active()
             return self._json({"model": d.name, "kind": d.kind, "licence": d.licence, "device": d.device, **STATS,
+                               "faces": {"engine": FACE_ENGINE, "known": len(KNOWN), "strangers": len(UNKNOWN)},
                                "chain": [x.info() for x in CHAIN], "switches": list(SWITCHES)})
+        if self.path.startswith("/faces/unknown"):
+            from urllib.parse import urlsplit, parse_qs
+            u = urlsplit(self.path)
+            q = {k: v[0] for k, v in parse_qs(u.query).items()}
+            if u.path == "/faces/unknown/picture":
+                gid = os.path.basename(q.get("id", ""))
+                try:
+                    data = open(os.path.join(UNKNOWN_DIR, gid + ".jpg"), "rb").read()
+                except OSError:
+                    return self.send_error(404)
+                self.send_response(200)
+                self.send_header("Content-Type", "image/jpeg")
+                self.send_header("Content-Length", str(len(data)))
+                self.end_headers()
+                return self.wfile.write(data)
+            if u.path == "/faces/unknown/delete":
+                with UNKNOWN_LOCK:
+                    drop_unknown(q.get("id", ""))
+                    save_unknown()
+            with UNKNOWN_LOCK:
+                groups = sorted(({"id": k, "count": v["count"], "first": round(v["first"]), "last": round(v["last"])}
+                                 for k, v in UNKNOWN.items()), key=lambda g: (-g["count"], -g["last"]))
+            return self._json({"engine": FACE_ENGINE, "groups": groups})
         if self.path.startswith("/faces/delete"):
             from urllib.parse import urlsplit, parse_qs
             name = parse_qs(urlsplit(self.path).query).get("name", [""])[0]
@@ -399,6 +554,7 @@ class Handler(BaseHTTPRequestHandler):
             save_faces()
         if self.path.startswith("/faces"):
             return self._json({k: int(len(v)) for k, v in KNOWN.items()})
+        # (the engine in use is reported by /faces/unknown and /status)
         self.send_error(404)
 
     def do_POST(self):
@@ -406,6 +562,9 @@ class Handler(BaseHTTPRequestHandler):
         url = urlsplit(self.path)
         q = {k: v[0] for k, v in parse_qs(url.query).items()}
         length = int(self.headers.get("Content-Length") or 0)
+        if url.path == "/faces/unknown/name":
+            name = q.get("name", "").strip()[:30]
+            return self._json(name_unknown(q.get("id", ""), name) if name else {"error": "name missing"})
         if url.path not in ("/detect", "/enroll"):
             return self.send_error(404)
         if not 0 < length < 20_000_000:

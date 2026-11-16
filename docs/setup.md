@@ -72,6 +72,17 @@ uv pip install -p /tmp/export/bin/python ultralytics onnxslim \
 supports them ("CUBLAS failure 8: architectural feature absent"). Install `"onnxruntime-gpu[cuda,cudnn]==1.22.0"`
 (CUDA 12) instead; a GTX 1060 then runs RF-DETR Small in about 15 ms per picture.
 
+Face models (YuNet + SFace, about 40 MB, used by default):
+
+```bash
+cd ~/.local/share/sentinel-bigeye/models
+curl -LO https://media.githubusercontent.com/media/opencv/opencv_zoo/main/models/face_detection_yunet/face_detection_yunet_2023mar.onnx
+curl -LO https://media.githubusercontent.com/media/opencv/opencv_zoo/main/models/face_recognition_sface/face_recognition_sface_2021dec.onnx
+```
+
+Faces of other people are personal data: the stranger groups stay on this machine and are dropped after 30 days unseen;
+check the rules where you live before you point a camera at places other people use.
+
 The detectors are tried in the order of `BIGEYE_MODELS` (default `rfdetr-small.onnx,yolo11s.onnx`); a missing file
 is skipped. Leave YOLO11 out for a setup with no AGPL parts in the detector.
 

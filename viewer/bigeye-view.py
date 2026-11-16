@@ -684,9 +684,9 @@ def notify_phone(name, text):
 def trigger(name, info):
     """Called by add-ons. Starts or extends a recording, saves a picture, logs an event."""
     now = time.time()
-    if SETTINGS.get("_page", {}).get("home"):
-        return  # Home mode: the owner is in; nothing is recorded or sent
     cfg = settings(name).get("motion", {})
+    if SETTINGS.get("_page", {}).get("home") and not cfg.get("at_home"):
+        return  # Home mode: the owner is in; nothing is recorded or sent (unless this camera keeps recording at home)
     policy = cfg.get("record_on", "person")
     ai_down = (ADDON_STATUS.get(name, {}).get("ai") or {}).get("down") or "ai" not in ADDONS
     if policy != "motion" and info.get("source") == "motion" and not ai_down:
@@ -1280,6 +1280,8 @@ class Handler(BaseHTTPRequestHandler):
                     m[key] = bool(body[key])
             if "skip_known" in body:
                 m["skip_known"] = bool(body["skip_known"])
+            if "at_home" in body:  # keep recording in Home mode (outdoor cameras: door, window)
+                m["at_home"] = bool(body["at_home"])
             if body.get("record_on") in ("motion", "person", "person_animal", "animal"):
                 m["record_on"] = body["record_on"]
             if body.get("look_for") in ("people", "all"):
@@ -1317,7 +1319,7 @@ class Handler(BaseHTTPRequestHandler):
                 CAMS[name].eq = (pic["brightness"], pic["contrast"])
                 CAMS[name].restart_reader()
             save_settings()
-        self._json(dict(m, record_on=m.get("record_on", "person"), look_for=m.get("look_for", "all"), ai=m.get("ai", True), skip_known=m.get("skip_known", True),
+        self._json(dict(m, record_on=m.get("record_on", "person"), look_for=m.get("look_for", "all"), ai=m.get("ai", True), skip_known=m.get("skip_known", True), at_home=m.get("at_home", False),
                         picture=settings(name).get("picture", {"brightness": 0, "contrast": 0}),
                         enhance=settings(name).get("enhance", {}), auto=settings(name).get("auto", {}),
                         privacy=settings(name).get("privacy", []), osd=settings(name).get("osd", False)))
@@ -1542,6 +1544,20 @@ class Handler(BaseHTTPRequestHandler):
                                                  data=frame, headers={"Content-Type": "image/jpeg"})
                 elif len(parts) == 2 and parts[1] == "delete" and self.command == "POST":
                     req = f"http://127.0.0.1:8771/faces/delete?name={urllib.parse.quote(q.get('name', ''))}"
+                elif len(parts) >= 2 and parts[1] == "unknown":  # people seen but not named (the AI groups them)
+                    gid = urllib.parse.quote(q.get("id", ""))
+                    if len(parts) == 3 and parts[2] == "picture":
+                        with urllib.request.urlopen(f"http://127.0.0.1:8771/faces/unknown/picture?id={gid}", timeout=10) as reply:
+                            return self._send(200, reply.read(), "image/jpeg")
+                    if len(parts) == 3 and parts[2] == "name" and self.command == "POST":
+                        req = urllib.request.Request(f"http://127.0.0.1:8771/faces/unknown/name?id={gid}&name="
+                                                     f"{urllib.parse.quote(q.get('name', ''))}", data=b"", method="POST")
+                    elif len(parts) == 3 and parts[2] == "delete" and self.command == "POST":
+                        req = f"http://127.0.0.1:8771/faces/unknown/delete?id={gid}"
+                    elif len(parts) == 2:
+                        req = "http://127.0.0.1:8771/faces/unknown"
+                    else:
+                        return self.send_error(404)
                 elif len(parts) == 1:
                     req = "http://127.0.0.1:8771/faces"
                 else:

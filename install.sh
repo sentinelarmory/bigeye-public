@@ -96,11 +96,15 @@ main_part() {
 
   say "AI environment ($VENV)"
   if [ -x "$VENV/bin/python" ]; then ok "exists"; else run uv venv -q -p 3.12 "$VENV"; fi
-  run uv pip install -q -p "$VENV/bin/python" "onnxruntime-gpu[cuda,cudnn]" numpy pillow insightface opencv-python-headless psutil
-  run uv pip uninstall -q -p "$VENV/bin/python" onnxruntime || true   # insightface pulls the CPU build; keep the GPU one
+  run uv pip install -q -p "$VENV/bin/python" "onnxruntime-gpu[cuda,cudnn]" numpy pillow opencv-python-headless psutil
+  # (InsightFace is optional, non-commercial: uv pip install insightface, then BIGEYE_FACES=insightface)
 
   say "Detector models ($MODELS)"
   run mkdir -p "$MODELS"
+  for f in face_detection_yunet/face_detection_yunet_2023mar.onnx face_recognition_sface/face_recognition_sface_2021dec.onnx; do
+    if [ -s "$MODELS/${f#*/}" ]; then ok "face model ${f#*/} found"
+    else run curl -fsSL -o "$MODELS/${f#*/}" "https://media.githubusercontent.com/media/opencv/opencv_zoo/main/models/$f"; fi
+  done
   if ls "$MODELS"/*.onnx >/dev/null 2>&1; then ok "found: $(cd "$MODELS" && ls -- *.onnx | tr '\n' ' ')"
   elif [ "$EXPORT" = 1 ]; then
     local tmp; tmp="$(mktemp -d)"
