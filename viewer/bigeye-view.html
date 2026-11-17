@@ -106,7 +106,6 @@ body.nvr #nvrbar{display:flex}
 #nvrdrawer.open{transform:none}
 #nvrdrawer .dh{position:sticky;top:0;background:var(--card);display:flex;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid var(--line);z-index:1}
 #nvrdrawer .dh b{font-size:15px;flex:1}#nvrdrawer .panel{display:grid!important;padding:12px 14px}
-@media (max-width:700px){body.nvr main{grid-template-columns:minmax(0,1fr)!important}body.nvr .card.nvr-big{grid-column:auto;grid-row:auto}}
 
 /* ---------- NVR side menu (left): cameras, events, system */
 body.nvr header{display:none}
@@ -134,7 +133,24 @@ body.nvr main{margin-left:var(--sw,300px);margin-top:44px}body.nvr.side-off main
 #nvrplayer[hidden]{display:none}#nvrplayer video,#nvrplayer img{max-width:92vw;max-height:80vh;border-radius:8px;background:#000}
 #nvrplayer .cap{color:var(--txt);font-size:13px;max-width:90vw;text-align:center}
 body.nvr #usagepanel,body.nvr #phonepanel,body.nvr #settings{top:12px;left:calc(var(--sw,300px) + 12px);right:auto}
-@media (max-width:700px){#nvrside{width:100vw}body.nvr main{margin-left:0}}
+
+/* ---------- NVR on a phone: the side menu is a drawer over the pictures, the grid scrolls, one-hand bar at the bottom */
+#nvrtop .mob{display:none}
+#nvrscrim{display:none;position:fixed;left:0;right:0;top:44px;bottom:38px;z-index:14;background:rgba(0,0,0,.55)}
+body.nvr .vid img{-webkit-touch-callout:none}
+@media (max-width:700px){
+  #nvrtop .mob{display:inline-flex}#nvrtop .brand,#nvrtop .hideonm{display:none}
+  #nvrtop .when{font-size:12px;margin-left:2px}#nvrtop{gap:2px;padding:0 6px}#nvrtop .tb2{padding:12px 7px}
+  body.nvr #nvrside{display:none;width:86vw;max-width:360px;z-index:15;box-shadow:10px 0 30px rgba(0,0,0,.6)}
+  body.nvr.side-open #nvrside{display:flex}body.nvr.side-open #nvrscrim{display:block}
+  body.nvr main{margin-left:0!important;overflow-y:auto;-webkit-overflow-scrolling:touch}
+  body.nvr .corner{font-size:10px}body.nvr .pill{padding:1px 6px}body.nvr .nvrname .pill{font-size:9px}
+  #nvrbar{gap:6px;padding:0 6px}#nvrbar .clockb,#nvrbar .hideonm{display:none}
+  body.nvr .ov{font-size:12px;text-align:center;padding:0 8px}
+  #nvrmenu{padding:14px}#nvrmenu .mt{gap:14px}#nvrmenu .mt button{font-size:13px}.tile{min-height:0;padding:14px}
+  #nvrdrawer{width:100vw}
+  #nvrctx{min-width:230px;font-size:15px}#nvrctx .it{padding:11px 12px}
+}
 
 /* ---------- NVR top bar, right-click menu, main menu */
 #nvrtop{display:none;position:fixed;left:0;right:0;top:0;height:44px;z-index:9;background:#0b0d10;border-bottom:1px solid var(--line);align-items:center;gap:6px;padding:0 10px}
@@ -144,7 +160,8 @@ body.nvr #nvrtop{display:flex}
 #nvrtop .tb2:hover{color:var(--txt)}#nvrtop .tb2.on{color:var(--txt);border-bottom-color:var(--acc)}
 #nvrtop .ico{position:relative;background:none;border:0;color:var(--txt);font-size:17px;cursor:pointer;padding:6px 8px;border-radius:8px}#nvrtop .ico:hover{background:var(--card2)}
 #nvrtop .badge{position:absolute;right:0;top:0;background:var(--bad);color:#fff;font:700 10px system-ui;border-radius:9px;padding:1px 5px}
-#nvrtop .when{font:13px ui-monospace,Consolas,monospace;color:var(--txt);margin-left:6px}
+#nvrtop .when{font:13px ui-monospace,Consolas,monospace;color:var(--txt);margin-left:6px;white-space:nowrap}
+#nvrbar>*{flex-shrink:0}
 body.nvr #nvrside{top:44px}body.nvr #nvrside .brand{display:none}
 .views{margin-top:14px;border-top:1px solid var(--line);padding-top:8px}
 .views h5{margin:0 0 6px;display:flex;justify-content:space-between;align-items:center;font-size:12px;color:var(--dim);font-weight:600}
@@ -1221,6 +1238,7 @@ setInterval(motionEvents, 10000); motionEvents(); setInterval(frigateEvents, 300
 
 // ---------- NVR mode: works like a recorder's live view. Layouts 1/4/6/9 and 1+5, pages, tour,
 // click = select, double-click (or ⛶) = this camera alone, ⚙ = its settings in a side drawer.
+function MOBILE() { return window.matchMedia('(max-width:700px)').matches; }
 var NVR = {on: false, layout: store('nvr:layout') || '6', page: 0, solo_: null, sel: null, tour: store('nvr:tour') === '1', tourT: 0};
 var LAYOUTS = {'1': {c: 1, r: 1, n: 1}, '4': {c: 2, r: 2, n: 4}, '6': {c: 3, r: 2, n: 6}, '1+5': {c: 3, r: 3, n: 6, big: 2}, '1+7': {c: 4, r: 4, n: 8, big: 3}, '9': {c: 3, r: 3, n: 9}};
 var nvrbar = el('div', {id: 'nvrbar'}), drawer = el('div', {id: 'nvrdrawer'});
@@ -1237,13 +1255,16 @@ NVR.apply = function () {
   grid.style.setProperty('--nc', L.c); grid.style.setProperty('--gh', gh + 'px');
   // Tiles get the pictures' own shape (16:9), so there are no black bands; a phone standing on end gets a tall tile.
   var gw = window.innerWidth - (parseInt(getComputedStyle(document.documentElement).getPropertyValue('--sw')) || 0);
-  var tw = (gw - 2 * (L.c - 1)) / L.c, th = tw * 9 / 16;
-  if (th * L.r + 2 * (L.r - 1) > gh) { th = (gh - 2 * (L.r - 1)) / L.r; tw = th * 16 / 9; }
+  var mob = MOBILE(), cols = mob ? (L.n === 1 ? 1 : L.n >= 9 ? 3 : 2) : L.c;
+  if (mob) { gw = window.innerWidth; grid.style.setProperty('--nc', cols); }
+  var tw = (gw - 2 * (cols - 1)) / cols, th = tw * 9 / 16;
+  if (!mob && th * L.r + 2 * (L.r - 1) > gh) { th = (gh - 2 * (L.r - 1)) / L.r; tw = th * 16 / 9; }
+  if (mob && cols === 1 && th > gh) { th = gh; tw = th * 16 / 9; }
   grid.style.setProperty('--tw', Math.floor(tw) + 'px'); grid.style.setProperty('--th', Math.floor(th) + 'px');
   names.forEach(function (n) {
     var card = document.getElementById('card-' + n), i = show.indexOf(n);
     card.classList.toggle('nvr-off', i < 0);
-    card.classList.toggle('nvr-big', L.big === 2 && i === 0); card.classList.toggle('nvr-big3', L.big === 3 && i === 0);
+    card.classList.toggle('nvr-big', (L.big === 2 || (L.big === 3 && MOBILE())) && i === 0); card.classList.toggle('nvr-big3', L.big === 3 && !MOBILE() && i === 0);
     card.classList.toggle('nvr-sel', n === NVR.sel);
     card.classList.toggle('nvr-tall', !L.big && L.n > 1 && !NVR.solo_ && card.querySelector('.vid').dataset.tall === 'true');
     card.style.order = i < 0 ? 99 : card.classList.contains('nvr-tall') ? -1 : i;   // a tall tile first: it needs two rows from the top
@@ -1300,8 +1321,8 @@ NVR.bar = function () {
   if (mov) nvrbar.appendChild(el('span', {'class': 'stat warn', text: '🏃 motion ' + mov}));
   nvrbar.appendChild(el('span', {'class': 'stat', text: HOME ? '🏠 Home' : '🛡 Away'}));
   nvrbar.appendChild(el('span', {style: 'flex:1'}));
-  nvrbar.appendChild(el('b', {text: new Date().toLocaleString().replace(',', '')}));
-  nvrbar.appendChild(el('button', {'class': 'btn', text: '▤ Normal view', title: 'Back to the normal page (N)', onclick: function () { NVR.set(false); }}));
+  nvrbar.appendChild(el('b', {'class': 'clockb', text: new Date().toLocaleString().replace(',', '')}));
+  nvrbar.appendChild(el('button', {'class': 'btn', text: MOBILE() ? '▤' : '▤ Normal view', title: 'Back to the normal page (N)', onclick: function () { NVR.set(false); }}));
 };
 setInterval(function () {
   if (!NVR.on) return;
@@ -1434,16 +1455,16 @@ NVR.set = function (on) {
 };
 var nvrApply0 = NVR.apply;
 NVR.apply = function () {
-  document.documentElement.style.setProperty('--sw', document.body.classList.contains('side-off') ? '0px' : '300px');
+  document.documentElement.style.setProperty('--sw', document.body.classList.contains('side-off') || MOBILE() ? '0px' : '300px');
   nvrApply0(); SIDE.render(false);
 };
 var nvrBar0 = NVR.bar;
 NVR.bar = function () {
   nvrBar0(); if (!NVR.on) return;
-  nvrbar.insertBefore(el('button', {'class': 'btn' + (document.body.classList.contains('side-off') ? '' : ' on'), text: '☰', title: 'Side menu on/off (M)',
+  nvrbar.insertBefore(el('button', {'class': 'btn' + (MOBILE() ? (document.body.classList.contains('side-open') ? ' on' : '') : (document.body.classList.contains('side-off') ? '' : ' on')), text: '☰', title: 'Side menu on/off (M)',
     onclick: NVR.toggleSide}), nvrbar.firstChild);
 };
-NVR.toggleSide = function () { var off = !document.body.classList.contains('side-off'); document.body.classList.toggle('side-off', off); store('nvr:side', off ? '0' : '1'); NVR.apply(); };
+NVR.toggleSide = function () { if (MOBILE()) { document.body.classList.toggle('side-open'); SIDE.render(true); return; } var off = !document.body.classList.contains('side-off'); document.body.classList.toggle('side-off', off); store('nvr:side', off ? '0' : '1'); NVR.apply(); };
 setInterval(function () { if (NVR.on && SIDE.tab === 'cams') SIDE.render(false); }, 2000);
 setInterval(SIDE.loadEvents, 10000);
 document.addEventListener('keydown', function (e) {
@@ -1469,6 +1490,7 @@ function renderTop() {
   if (!NVR.on) return;
   var fresh = SIDE.evs.filter(function (e) { return e.time > seenT; }).length;
   nvrTop.innerHTML = '';
+  nvrTop.appendChild(el('button', {'class': 'ico mob', text: '☰', title: 'Menu: cameras, events, system', onclick: function (e) { e.stopPropagation(); NVR.toggleSide(); }}));
   nvrTop.appendChild(el('span', {'class': 'brand'})); nvrTop.lastChild.innerHTML = 'Sentinel-<span>BigEye</span>';
   nvrTop.appendChild(el('button', {'class': 'tb2' + (NVR.page_ === 'menu' ? ' on' : ''), title: 'Main menu', onclick: function () { NVR.page_ === 'menu' ? NVR.closeMenu() : NVR.openMenu(); }}, [el('span', {text: '🏠'}), el('span', {text: 'MENU'})]));
   nvrTop.appendChild(el('button', {'class': 'tb2' + (NVR.page_ === 'live' ? ' on' : ''), text: 'LIVE', onclick: NVR.closeMenu}));
@@ -1477,12 +1499,13 @@ function renderTop() {
     [el('span', {text: '🔔'}), fresh ? el('span', {'class': 'badge', text: fresh > 99 ? '99+' : String(fresh)}) : null]));
   nvrTop.appendChild(el('button', {'class': 'ico', title: HOME ? 'Home: nothing is recorded or sent (click: Away)' : 'Away: watching (click: Home)', text: HOME ? '🏠' : '🛡',
     onclick: function () { click('#homeseg button[data-h="' + (HOME ? '0' : '1') + '"]'); setTimeout(renderTop, 800); }}));
-  nvrTop.appendChild(el('button', {'class': 'ico', title: 'Recordings folder', text: '⬇', onclick: function () { click('[data-open="recordings"]'); }}));
-  nvrTop.appendChild(el('button', {'class': 'ico', title: 'Full screen (F)', text: '⛶', onclick: fullscreen}));
-  nvrTop.appendChild(el('span', {'class': 'when', text: new Date().toLocaleString().replace(',', '')}));
+  nvrTop.appendChild(el('button', {'class': 'ico hideonm', title: 'Recordings folder', text: '⬇', onclick: function () { click('[data-open="recordings"]'); }}));
+  nvrTop.appendChild(el('button', {'class': 'ico hideonm', title: 'Full screen (F)', text: '⛶', onclick: fullscreen}));
+  nvrTop.appendChild(el('span', {'class': 'when', text: nowText()}));
 }
 SIDE.markSeen = function () { seenT = Date.now() / 1000; store('nvr:seen', String(seenT)); renderTop(); };
-setInterval(function () { if (NVR.on) { var w = nvrTop.querySelector('.when'); if (w) w.textContent = new Date().toLocaleString().replace(',', ''); } }, 1000);
+function nowText() { return MOBILE() ? new Date().toLocaleTimeString() : new Date().toLocaleString().replace(',', ''); }
+setInterval(function () { if (NVR.on) { var w = nvrTop.querySelector('.when'); if (w) w.textContent = nowText(); } }, 1000);
 setInterval(renderTop, 10000);
 // ---- side menu: search box and saved views on the camera tab; search on the events tab
 SIDE.q = '';
@@ -1598,6 +1621,11 @@ SIDE.loadEvents = function () { loadEv0(); setTimeout(renderTop, 1500); };
 document.addEventListener('keydown', function (e) {
   if (!NVR.on || e.target.tagName === 'INPUT') return;
   if (e.key === 'Escape') { ctx.hidden = true; document.querySelectorAll('.dlg').forEach(function (d) { d.remove(); }); if (!menu.hidden) NVR.closeMenu(); }
+});
+var scrim = el('div', {id: 'nvrscrim', onclick: function () { document.body.classList.remove('side-open'); NVR.bar(); }});
+document.body.appendChild(scrim);
+side.addEventListener('click', function (e) {
+  if (MOBILE() && e.target.closest('.camrow, .viewrow, .sevt, .g')) setTimeout(function () { document.body.classList.remove('side-open'); NVR.bar(); }, 120);
 });
 if (store('nvr') === '1') NVR.set(true);
 </script></html>

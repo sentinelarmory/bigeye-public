@@ -175,6 +175,20 @@ public class CamService extends Service implements SensorEventListener {
             if (focus != null && focus.contains(Camera.Parameters.FOCUS_MODE_CONTINUOUS_VIDEO))
                 p.setFocusMode(Camera.Parameters.FOCUS_MODE_CONTINUOUS_VIDEO);
             if (p.isVideoStabilizationSupported()) p.setVideoStabilization(false);
+            // The chip itself should not run faster than needed: at 30 fps it works (and heats) for pictures we drop.
+            // Pick the slowest range that still covers the asked frame rate (A15: 15-30 -> 15-15, about half the work).
+            List<int[]> ranges = p.getSupportedPreviewFpsRange();
+            if (ranges != null) {
+                int want = Math.max(1, prefs.getInt("fps", 10)) * 1000;
+                int[] best = null;
+                for (int[] r : ranges) {
+                    if (r[Camera.Parameters.PREVIEW_FPS_MAX_INDEX] < want) continue;
+                    if (best == null || r[Camera.Parameters.PREVIEW_FPS_MAX_INDEX] < best[Camera.Parameters.PREVIEW_FPS_MAX_INDEX]
+                            || (r[Camera.Parameters.PREVIEW_FPS_MAX_INDEX] == best[Camera.Parameters.PREVIEW_FPS_MAX_INDEX]
+                                && r[Camera.Parameters.PREVIEW_FPS_MIN_INDEX] < best[Camera.Parameters.PREVIEW_FPS_MIN_INDEX])) best = r;
+                }
+                if (best != null) p.setPreviewFpsRange(best[Camera.Parameters.PREVIEW_FPS_MIN_INDEX], best[Camera.Parameters.PREVIEW_FPS_MAX_INDEX]);
+            }
             List<String> flash = p.getSupportedFlashModes();   // light: exactly what was asked for, never left on by a restart
             if (flash != null && flash.contains(Camera.Parameters.FLASH_MODE_TORCH) && torch) p.setFlashMode(Camera.Parameters.FLASH_MODE_TORCH);
             else if (flash != null && flash.contains(Camera.Parameters.FLASH_MODE_OFF)) p.setFlashMode(Camera.Parameters.FLASH_MODE_OFF);
@@ -370,7 +384,7 @@ public class CamService extends Service implements SensorEventListener {
         int health = b == null ? 0 : b.getIntExtra(BatteryManager.EXTRA_HEALTH, 0);
         long age = frameTime == 0 ? -1 : System.currentTimeMillis() - frameTime;
         return String.format(Locale.ROOT,
-                "{\"app\":\"BigEye Cam\",\"version\":\"1.0.4\",\"model\":\"%s\",\"android\":\"%s\",\"battery_pct\":%d,"
+                "{\"app\":\"BigEye Cam\",\"version\":\"1.0.5\",\"model\":\"%s\",\"android\":\"%s\",\"battery_pct\":%d,"
                         + "\"charging\":%b,\"battery_temp_c\":%.1f,\"battery_health\":%d,\"width\":%d,\"height\":%d,"
                         + "\"fps\":%d,\"quality\":%d,\"camera\":%d,\"torch\":%b,\"frame_age_ms\":%d,\"uptime_s\":%d,\"turn\":%d}",
                 Build.MODEL.replace("\"", ""), Build.VERSION.RELEASE, scale > 0 ? level * 100 / scale : level,
