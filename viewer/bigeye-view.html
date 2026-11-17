@@ -132,7 +132,8 @@ body.nvr main{margin-left:var(--sw,300px);margin-top:44px}body.nvr.side-off main
 #nvrplayer{position:fixed;inset:0;z-index:20;background:rgba(0,0,0,.85);display:flex;align-items:center;justify-content:center;flex-direction:column;gap:10px}
 #nvrplayer[hidden]{display:none}#nvrplayer video,#nvrplayer img{max-width:92vw;max-height:80vh;border-radius:8px;background:#000}
 #nvrplayer .cap{color:var(--txt);font-size:13px;max-width:90vw;text-align:center}
-body.nvr #usagepanel,body.nvr #phonepanel,body.nvr #settings{top:12px;left:calc(var(--sw,300px) + 12px);right:auto}
+body.nvr #usagepanel,body.nvr #phonepanel,body.nvr #settings{top:56px;left:calc(var(--sw,300px) + 12px);right:auto;z-index:16;max-height:calc(100vh - 110px);overflow-y:auto}
+@media (max-width:700px){body.nvr #usagepanel,body.nvr #phonepanel,body.nvr #settings{left:8px;right:8px;width:auto}}
 
 /* ---------- NVR on a phone: the side menu is a drawer over the pictures, the grid scrolls, one-hand bar at the bottom */
 #nvrtop .mob{display:none}
@@ -1578,11 +1579,11 @@ function renderMenu() {
   var tabsM = el('div', {'class': 'mt'}, [['apps', '▦ APPLICATIONS'], ['settings', '⚙ SETTINGS']].map(function (t) {
     return el('button', {text: t[1], 'class': tab === t[0] ? 'on' : '', onclick: function () { menu.dataset.tab = t[0]; renderMenu(); }}); }));
   menu.appendChild(tabsM);
-  var go = function (fn) { return function () { NVR.closeMenu(); fn(); }; };
+  var go = function (fn) { return function () { NVR.closeMenu(); setTimeout(fn, 0); }; };   // after this click: the panels close on any page click
   var side = function (t, extra) { return go(function () { if (extra) extra(); SIDE.tab = t; store('nvr:tab', t); if (document.body.classList.contains('side-off')) NVR.toggleSide(); SIDE.render(true); }); };
   var tile = function (icon, name, desc, act, links) {
     var t = el('div', {'class': 'tile', onclick: act}, [el('div', {'class': 'tt'}, [el('i', {text: icon}), el('span', {text: name})]), desc ? el('div', {'class': 'ds', text: desc}) : null]);
-    if (links) t.appendChild(el('div', {'class': 'links'}, links.map(function (l) { return el('a', {text: l[0], onclick: function (e) { e.stopPropagation(); l[1](); }}); })));
+    if (links) t.appendChild(el('div', {'class': 'links'}, links.map(function (l) { return el('a', {text: l[0], onclick: function (e) { e.stopPropagation(); setTimeout(l[1], 0); }}); })));
     return t;
   };
   var grid2 = el('div', {'class': 'tiles'});
