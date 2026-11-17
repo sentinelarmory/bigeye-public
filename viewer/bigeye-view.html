@@ -87,7 +87,8 @@ section.strip{padding:6px 16px 16px}section.strip h2{font-size:14px;color:var(--
 /* ---------- NVR mode: a wall of pictures edge to edge, a status bar, settings in a side drawer */
 body.nvr{overflow:hidden}
 body.nvr #layout,body.nvr section.strip,body.nvr .title,body.nvr .card>.panel{display:none!important}
-body.nvr main{padding:0;gap:2px;background:#000;grid-template-columns:repeat(var(--nc,2),minmax(0,1fr));grid-auto-rows:var(--th,40vh);height:var(--gh,80vh);overflow:hidden}
+body.nvr main{padding:0;gap:2px;background:#000;grid-template-columns:repeat(var(--nc,2),var(--tw,minmax(0,1fr)));grid-auto-rows:var(--th,40vh);height:var(--gh,80vh);overflow:hidden;justify-content:center;align-content:start;grid-auto-flow:dense}
+body.nvr .card.nvr-tall{grid-row:span 2}
 body.nvr .card{border:0;border-radius:0;background:#000;outline:1px solid #1b1f26;outline-offset:-1px}
 body.nvr .card.nvr-off{display:none}
 body.nvr .card.nvr-sel .vid::after{content:'';position:absolute;inset:0;border:2px solid var(--acc);pointer-events:none;z-index:3}
@@ -1234,13 +1235,18 @@ NVR.apply = function () {
   var gh = window.innerHeight - hh - 38;
   document.documentElement.style.setProperty('--hh', hh + 'px');
   grid.style.setProperty('--nc', L.c); grid.style.setProperty('--gh', gh + 'px');
-  grid.style.setProperty('--th', Math.floor((gh - 2 * (L.r - 1)) / L.r) + 'px');
+  // Tiles get the pictures' own shape (16:9), so there are no black bands; a phone standing on end gets a tall tile.
+  var gw = window.innerWidth - (parseInt(getComputedStyle(document.documentElement).getPropertyValue('--sw')) || 0);
+  var tw = (gw - 2 * (L.c - 1)) / L.c, th = tw * 9 / 16;
+  if (th * L.r + 2 * (L.r - 1) > gh) { th = (gh - 2 * (L.r - 1)) / L.r; tw = th * 16 / 9; }
+  grid.style.setProperty('--tw', Math.floor(tw) + 'px'); grid.style.setProperty('--th', Math.floor(th) + 'px');
   names.forEach(function (n) {
     var card = document.getElementById('card-' + n), i = show.indexOf(n);
     card.classList.toggle('nvr-off', i < 0);
     card.classList.toggle('nvr-big', L.big === 2 && i === 0); card.classList.toggle('nvr-big3', L.big === 3 && i === 0);
     card.classList.toggle('nvr-sel', n === NVR.sel);
-    card.style.order = i < 0 ? 99 : i;
+    card.classList.toggle('nvr-tall', !L.big && L.n > 1 && !NVR.solo_ && card.querySelector('.vid').dataset.tall === 'true');
+    card.style.order = i < 0 ? 99 : card.classList.contains('nvr-tall') ? -1 : i;   // a tall tile first: it needs two rows from the top
   });
   setTimeout(function () { document.querySelectorAll('.card').forEach(layoutZones); }, 60);
   NVR.bar();
