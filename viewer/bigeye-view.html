@@ -90,7 +90,7 @@ body.nvr #layout,body.nvr section.strip,body.nvr .title,body.nvr .card>.panel{di
 body.nvr main{padding:0;gap:2px;background:#000;grid-template-columns:repeat(var(--nc,2),minmax(0,1fr));grid-auto-rows:var(--th,40vh);height:var(--gh,80vh);overflow:hidden}
 body.nvr .card{border:0;border-radius:0;background:#000;outline:1px solid #1b1f26;outline-offset:-1px}
 body.nvr .card.nvr-off{display:none}
-body.nvr .card.nvr-sel{outline:2px solid var(--acc);outline-offset:-2px;z-index:1}
+body.nvr .card.nvr-sel .vid::after{content:'';position:absolute;inset:0;border:2px solid var(--acc);pointer-events:none;z-index:3}
 body.nvr .card.nvr-big{grid-column:span 2;grid-row:span 2}
 body.nvr .vid{aspect-ratio:auto!important;width:100%!important;height:100%!important;margin:0!important;cursor:pointer}
 body.nvr .corner{font-size:11px}body.nvr .pill{padding:2px 7px}
@@ -106,6 +106,34 @@ body.nvr #nvrbar{display:flex}
 #nvrdrawer .dh{position:sticky;top:0;background:var(--card);display:flex;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid var(--line);z-index:1}
 #nvrdrawer .dh b{font-size:15px;flex:1}#nvrdrawer .panel{display:grid!important;padding:12px 14px}
 @media (max-width:700px){body.nvr main{grid-template-columns:minmax(0,1fr)!important}body.nvr .card.nvr-big{grid-column:auto;grid-row:auto}}
+
+/* ---------- NVR side menu (left): cameras, events, system */
+body.nvr header{display:none}
+#nvrside{display:none;position:fixed;left:0;top:0;bottom:38px;width:var(--sw,300px);z-index:7;background:#0b0d10;border-right:1px solid var(--line);flex-direction:column}
+body.nvr #nvrside{display:flex}body.nvr.side-off #nvrside{display:none}
+body.nvr main{margin-left:var(--sw,300px)}body.nvr.side-off main{margin-left:0}
+#nvrside .brand{padding:12px 14px 8px;font-weight:700;font-size:15px}#nvrside .brand span{color:var(--acc)}
+#nvrside .tabs{display:flex;border-bottom:1px solid var(--line)}
+#nvrside .tabs button{flex:1;background:none;border:0;border-bottom:2px solid transparent;color:var(--dim);padding:8px 4px;cursor:pointer;font:inherit;font-size:12px}
+#nvrside .tabs button.on{color:var(--txt);border-bottom-color:var(--acc)}
+#nvrside .body{flex:1;overflow-y:auto;padding:8px}
+.camrow{display:grid;grid-template-columns:auto 1fr auto;gap:2px 8px;align-items:center;padding:7px 8px;border-radius:8px;cursor:pointer;border:1px solid transparent}
+.camrow:hover{background:var(--card2)}.camrow.sel{border-color:var(--acc);background:#14202e}
+.camrow .d{width:9px;height:9px;border-radius:50%;background:var(--ok)}.camrow.down .d{background:var(--bad)}
+.camrow b{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.camrow .m{grid-column:2/4;color:var(--dim);font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.camrow .tags{display:flex;gap:4px;align-items:center}.camrow .tags span{font-size:10px;font-weight:700;padding:1px 5px;border-radius:4px}
+.tag-rec{background:var(--bad);color:#fff}.tag-mot{background:var(--warn);color:#000}
+.camrow .g{background:none;border:0;color:var(--dim);cursor:pointer;font-size:14px;padding:0 2px}.camrow .g:hover{color:var(--txt)}
+.sevt{display:grid;grid-template-columns:96px 1fr;gap:8px;padding:6px;border-radius:8px;cursor:pointer;font-size:12px}
+.sevt:hover{background:var(--card2)}.sevt img{width:96px;height:54px;object-fit:cover;border-radius:5px;background:#000}
+.sevt .desc{color:var(--dim);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.sysbox{display:grid;gap:10px}.sysbox>*{justify-self:start}.sysbox h4{margin:6px 0 0;font-size:11px;color:var(--dim);font-weight:600;text-transform:uppercase;letter-spacing:.5px}
+#nvrplayer{position:fixed;inset:0;z-index:20;background:rgba(0,0,0,.85);display:flex;align-items:center;justify-content:center;flex-direction:column;gap:10px}
+#nvrplayer[hidden]{display:none}#nvrplayer video,#nvrplayer img{max-width:92vw;max-height:80vh;border-radius:8px;background:#000}
+#nvrplayer .cap{color:var(--txt);font-size:13px;max-width:90vw;text-align:center}
+body.nvr #usagepanel,body.nvr #phonepanel,body.nvr #settings{top:12px;left:calc(var(--sw,300px) + 12px);right:auto}
+@media (max-width:700px){#nvrside{width:100vw}body.nvr main{margin-left:0}}
 </style>
 <header><h1>Sentinel-<span>BigEye</span></h1>
 <nav class="seg"><button class="on">📹 Cameras</button><button onclick="location.href='/telemetry'">📡 Call-home</button></nav>
@@ -1169,7 +1197,7 @@ NVR.cams = function () { return orderedCams().map(function (c) { return c.name; 
 NVR.layoutNow = function () { return NVR.solo_ ? LAYOUTS['1'] : LAYOUTS[NVR.layout]; };
 NVR.pages = function () { return NVR.solo_ ? 1 : Math.max(1, Math.ceil(NVR.cams().length / NVR.layoutNow().n)); };
 NVR.apply = function () {
-  var L = NVR.layoutNow(), names = NVR.cams(), hh = document.querySelector('header').offsetHeight;
+  var L = NVR.layoutNow(), names = NVR.cams(), hh = document.querySelector('header').offsetHeight;  // 0 in NVR (hidden)
   if (NVR.page >= NVR.pages()) NVR.page = 0;
   var show = NVR.solo_ ? [NVR.solo_] : names.slice(NVR.page * L.n, NVR.page * L.n + L.n);
   var gh = window.innerHeight - hh - 38;
@@ -1256,6 +1284,135 @@ document.addEventListener('keydown', function (e) {
   if (e.key === 'Escape') { if (drawer.dataset.cam) NVR.drawer(null); else if (NVR.solo_) NVR.solo(NVR.solo_); }
   var k = {'1': '1', '4': '4', '6': '6', '9': '9', '5': '1+5'}[e.key]; if (k) NVR.setLayout(k);
   if (e.key === 'PageDown') NVR.go(1); if (e.key === 'PageUp') NVR.go(-1);
+});
+
+// ---------- NVR side menu: cameras (status, pick, ⚙), events (play the clip), system (Home/Away and the rest)
+var side = el('div', {id: 'nvrside'}), sideBody = el('div', {'class': 'body'}), player = el('div', {id: 'nvrplayer', hidden: ''});
+var SIDE = {tab: store('nvr:tab') || 'cams', evcam: '', evs: [], moved: []};
+document.body.appendChild(side); document.body.appendChild(player);
+player.addEventListener('click', function (e) { if (e.target === player) { player.hidden = true; player.innerHTML = ''; } });
+var tabs = el('div', {'class': 'tabs'});
+[['cams', '📹 Cameras'], ['events', '🔔 Events'], ['system', '🏠 System']].forEach(function (t) {
+  tabs.appendChild(el('button', {text: t[1], 'data-t': t[0], onclick: function () { SIDE.tab = t[0]; store('nvr:tab', t[0]); SIDE.render(true); }}));
+});
+side.appendChild(el('div', {'class': 'brand'}));
+side.firstChild.innerHTML = 'Sentinel-<span>BigEye</span>';
+side.appendChild(tabs); side.appendChild(sideBody);
+var SYS = ['nav.seg', '[title="Open the folder on this PC"]', '#homeseg', '#autohome', '#fixall', '#autofix', '#usagebtn', '#phonebtn', '#gear', '#fs'];
+SIDE.system = function () {   // borrow the header's own buttons, so they keep working exactly as before
+  var box = el('div', {'class': 'sysbox'});
+  var add = function (label) { box.appendChild(el('h4', {text: label})); };
+  var put = function (sel) { var n = document.querySelector(sel); if (!n) return;
+    if (!SIDE.moved.some(function (m) { return m.n === n; })) SIDE.moved.push({n: n, p: n.parentNode, nx: n.nextSibling});
+    box.appendChild(n); };
+  add('Home / Away'); put('#homeseg'); put('#autohome');
+  add('Cameras'); put('#fixall'); put('#autofix');
+  add('Saved on this PC'); put('[title="Open the folder on this PC"]');
+  add('This PC and the phone'); put('#usagebtn'); put('#phonebtn');
+  add('Display'); put('#gear'); put('#fs');
+  add('Pages'); put('nav.seg');
+  return box;
+};
+SIDE.giveBack = function () {   // the header gets its buttons back (in their old order)
+  SIDE.moved.slice().reverse().forEach(function (m) { m.p.insertBefore(m.n, m.nx && m.nx.parentNode === m.p ? m.nx : null); });
+  SIDE.moved = [];
+};
+SIDE.cams = function () {
+  var box = el('div', {});
+  NVR.cams().forEach(function (n) {
+    var card = document.getElementById('card-' + n), down = card.classList.contains('stale');
+    var info = (card.querySelector('.infopill') || {}).textContent || '';
+    var r = el('div', {'class': 'camrow' + (down ? ' down' : '') + (NVR.sel === n ? ' sel' : ''), title: 'Click: show and select · double-click: alone · ⚙: settings'}, [
+      el('span', {'class': 'd'}), el('b', {text: title(n)}),
+      el('span', {'class': 'tags'}, [card.classList.contains('rec') ? el('span', {'class': 'tag-rec', text: 'REC'}) : null,
+        card.classList.contains('moving') ? el('span', {'class': 'tag-mot', text: 'MOTION'}) : null,
+        el('button', {'class': 'g', text: '⚙', title: 'Settings', onclick: function (e) { e.stopPropagation(); NVR.drawer(n); }})]),
+      el('span', {'class': 'm', text: (down ? 'no picture · ' : '') + (card.meta.textContent || info)})]);
+    r.addEventListener('click', function () { NVR.show(n); });
+    r.addEventListener('dblclick', function () { NVR.solo(n); });
+    box.appendChild(r);
+  });
+  var ptz = NVR.sel && CAMS.filter(function (c) { return c.name === NVR.sel && has(c, 'ptz'); })[0];
+  if (ptz) {   // the 360: steer it from here too
+    var pad = ptzPad(ptz.name); pad.querySelectorAll('[id]').forEach(function (x) { x.removeAttribute('id'); });
+    var pre = el('div', {'class': 'chips'});
+    json('/settings/' + ptz.name).then(function (m) { ((m.ptz || {}).presets || []).forEach(function (p) {
+      pre.appendChild(el('span', {'class': 'chip'}, [el('button', {text: p.name, onclick: function () {
+        json('/ptz/' + ptz.name + '/go?name=' + encodeURIComponent(p.name)).then(function () { toast(title(ptz.name) + ': going to ' + p.name, 'ok'); }); }})])); }); });
+    box.appendChild(el('div', {style: 'margin-top:12px;display:grid;gap:8px'}, [el('b', {text: '🎮 ' + title(ptz.name)}), pad, pre]));
+  }
+  return box;
+};
+SIDE.play = function (e) {
+  var src = '/saved/' + (e.clip || e.picture).split('/').map(encodeURIComponent).join('/');
+  player.innerHTML = '';
+  player.appendChild(e.clip ? el('video', {src: src, controls: '', autoplay: ''}) : el('img', {src: src}));
+  player.appendChild(el('div', {'class': 'cap', text: title(e.cam) + ' · ' + new Date(e.time * 1000).toLocaleString() + (e.desc ? ' — ' + e.desc : '')}));
+  player.appendChild(el('button', {'class': 'btn', text: 'Close (Esc)', onclick: function () { player.hidden = true; player.innerHTML = ''; }}));
+  player.hidden = false;
+};
+SIDE.events = function () {
+  var box = el('div', {});
+  var pick = el('select', {'class': 'btn', style: 'width:100%;margin-bottom:8px', onchange: function () { SIDE.evcam = pick.value; SIDE.render(true); }});
+  pick.appendChild(el('option', {value: '', text: 'All cameras'}));
+  NVR.cams().forEach(function (n) { var o = el('option', {value: n, text: title(n)}); if (n === SIDE.evcam) o.selected = true; pick.appendChild(o); });
+  box.appendChild(pick);
+  var list = SIDE.evs.filter(function (e) { return !SIDE.evcam || e.cam === SIDE.evcam; }).slice(0, 40);
+  if (!list.length) box.appendChild(el('div', {'class': 'hint', text: 'Nothing yet.'}));
+  list.forEach(function (e) {
+    var pic = '/saved/' + e.picture.split('/').map(encodeURIComponent).join('/');
+    var r = el('div', {'class': 'sevt', title: e.clip ? 'Play the clip' : 'Show the picture'}, [el('img', {src: pic, loading: 'lazy'}),
+      el('div', {}, [el('b', {text: title(e.cam) + (e.label ? ' · ' + e.label : '') + (e.clip ? ' ▶' : '')}), el('div', {'class': 'hint', text: new Date(e.time * 1000).toLocaleString()}),
+        e.desc ? el('div', {'class': 'desc', text: e.desc}) : null])]);
+    r.addEventListener('click', function () { SIDE.play(e); });
+    box.appendChild(r);
+  });
+  return box;
+};
+SIDE.render = function (force) {
+  if (!NVR.on) return;
+  tabs.querySelectorAll('button').forEach(function (b) { b.classList.toggle('on', b.dataset.t === SIDE.tab); });
+  if (SIDE.tab === 'system') { if (force || !sideBody.querySelector('.sysbox')) { sideBody.innerHTML = ''; sideBody.appendChild(SIDE.system()); } return; }
+  if (SIDE.tab === 'events' && !force) return;   // the list is redrawn when new events arrive
+  var keep = sideBody.scrollTop; sideBody.innerHTML = '';
+  sideBody.appendChild(SIDE.tab === 'events' ? SIDE.events() : SIDE.cams()); sideBody.scrollTop = keep;
+};
+SIDE.loadEvents = function () {
+  if (!NVR.on) return;
+  json('/events').then(function (l) { var fresh = JSON.stringify(l.slice(0, 3)) !== JSON.stringify(SIDE.evs.slice(0, 3)); SIDE.evs = l;
+    if (fresh && SIDE.tab === 'events') SIDE.render(true); }).catch(function () {});
+};
+NVR.show = function (n) {   // go to the page that has this camera and select it
+  var i = NVR.cams().indexOf(n), per = NVR.layoutNow().n;
+  if (NVR.solo_ && NVR.solo_ !== n) NVR.solo_ = n;
+  else if (!NVR.solo_) NVR.page = Math.floor(i / LAYOUTS[NVR.layout].n);
+  NVR.sel = n; NVR.apply();
+};
+var nvrSet0 = NVR.set;
+NVR.set = function (on) {
+  if (!on) { SIDE.giveBack(); player.hidden = true; player.innerHTML = ''; }
+  document.body.classList.toggle('side-off', store('nvr:side') === '0');
+  nvrSet0(on);
+  if (on) { SIDE.loadEvents(); SIDE.render(true); }
+};
+var nvrApply0 = NVR.apply;
+NVR.apply = function () {
+  document.documentElement.style.setProperty('--sw', document.body.classList.contains('side-off') ? '0px' : '300px');
+  nvrApply0(); SIDE.render(false);
+};
+var nvrBar0 = NVR.bar;
+NVR.bar = function () {
+  nvrBar0(); if (!NVR.on) return;
+  nvrbar.insertBefore(el('button', {'class': 'btn' + (document.body.classList.contains('side-off') ? '' : ' on'), text: '☰', title: 'Side menu on/off (M)',
+    onclick: NVR.toggleSide}), nvrbar.firstChild);
+};
+NVR.toggleSide = function () { var off = !document.body.classList.contains('side-off'); document.body.classList.toggle('side-off', off); store('nvr:side', off ? '0' : '1'); NVR.apply(); };
+setInterval(function () { if (NVR.on && SIDE.tab === 'cams') SIDE.render(false); }, 2000);
+setInterval(SIDE.loadEvents, 10000);
+document.addEventListener('keydown', function (e) {
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.ctrlKey || e.altKey || e.metaKey) return;
+  if (e.key === 'Escape' && !player.hidden) { player.hidden = true; player.innerHTML = ''; }
+  if (NVR.on && (e.key === 'm' || e.key === 'M')) NVR.toggleSide();
 });
 if (store('nvr') === '1') NVR.set(true);
 </script></html>
