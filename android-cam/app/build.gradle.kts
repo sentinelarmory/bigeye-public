@@ -14,8 +14,8 @@ android {
         applicationId = "no.sentinel.bigeyecam"
         minSdk = 21          // old phones (Android 5) are the point: they become cameras
         targetSdk = 35
-        versionCode = 4
-        versionName = "1.0.3"
+        versionCode = 5
+        versionName = "1.0.4"
     }
     signingConfigs {
         create("release") {

@@ -15,6 +15,10 @@ import android.graphics.Rect;
 import android.graphics.SurfaceTexture;
 import android.graphics.YuvImage;
 import android.hardware.Camera;
+import android.hardware.Sensor;
+import android.hardware.SensorEvent;
+import android.hardware.SensorEventListener;
+import android.hardware.SensorManager;
 import android.net.wifi.WifiManager;
 import android.os.BatteryManager;
 import android.os.Build;
@@ -39,14 +43,15 @@ import java.util.Locale;
  *
  *   /cam.mjpg      live picture (multipart/x-mixed-replace), what BigEye reads
  *   /snapshot.jpg  the newest picture
- *   /status        JSON: battery, charging, battery temperature, size, fps, uptime
+ *   /status        JSON: battery, charging, battery temperature, size, fps, uptime, and "turn": how many degrees
+ *                  clockwise the picture must be turned to stand upright (from the phone's gravity sensor)
  *   /torch?on=1|0  the phone's light
  *   /config?size=1280x720&fps=10&quality=70&camera=0|1   (saved, camera restarts)
  *
  * No cloud, no account, no ads: it only answers on the network the phone is on (BigEye puts it on the camera Wi-Fi,
  * which has no way out).
  */
-public class CamService extends Service {
+public class CamService extends Service implements SensorEventListener {
     static final int PORT = 8080;
     static final String CH = "cam";
     static volatile boolean running;
@@ -66,6 +71,11 @@ public class CamService extends Service {
     private long lastEncode;
     private volatile boolean torch;
     private SharedPreferences prefs;
+    private SensorManager sensors;
+    private volatile int sensorDeg = 90;      // the camera chip's own turn (Camera.CameraInfo.orientation)
+    private volatile boolean frontCam;
+    private volatile int holdDeg = -1;        // how the phone is held: 0 upright, 90 turned clockwise, 180, 270
+    private int candDeg = -1, candCount;
 
     @Override
     public IBinder onBind(Intent intent) { return null; }
@@ -109,6 +119,9 @@ public class CamService extends Service {
             camHandler = new Handler(camThread.getLooper());
             camHandler.post(this::openCamera);
             new Thread(this::serve, "http").start();
+            sensors = (SensorManager) getSystemService(Context.SENSOR_SERVICE);
+            Sensor acc = sensors == null ? null : sensors.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
+            if (acc != null) sensors.registerListener(this, acc, SensorManager.SENSOR_DELAY_NORMAL, camHandler);
         }
         return START_STICKY;
     }
@@ -116,6 +129,7 @@ public class CamService extends Service {
     @Override
     public void onDestroy() {
         running = false;
+        if (sensors != null) sensors.unregisterListener(this);
         try { if (server != null) server.close(); } catch (IOException ignored) { }
         if (camHandler != null) camHandler.post(this::closeCamera);
         if (camThread != null) camThread.quitSafely();
@@ -149,6 +163,10 @@ public class CamService extends Service {
         try {
             int id = Math.min(prefs.getInt("camera", 0), Math.max(0, Camera.getNumberOfCameras() - 1));
             camera = Camera.open(id);
+            Camera.CameraInfo info = new Camera.CameraInfo();
+            Camera.getCameraInfo(id, info);
+            sensorDeg = info.orientation;
+            frontCam = info.facing == Camera.CameraInfo.CAMERA_FACING_FRONT;
             Camera.Parameters p = camera.getParameters();
             Camera.Size s = pick(p.getSupportedPreviewSizes(), prefs.getString("size", "1280x720"));
             p.setPreviewSize(s.width, s.height);
@@ -322,6 +340,27 @@ public class CamService extends Service {
         }
     }
 
+    /** Gravity tells how the phone is held; a new way must hold for ~2 s before it counts (no flapping). */
+    @Override
+    public void onSensorChanged(SensorEvent e) {
+        float x = e.values[0], y = e.values[1], z = e.values[2];
+        if (Math.abs(z) > 8.0f) return;                 // lying flat: keep what we had
+        int deg = Math.abs(y) >= Math.abs(x) ? (y > 0 ? 0 : 180) : (x < 0 ? 90 : 270);
+        if (Math.max(Math.abs(x), Math.abs(y)) < 4.0f) return;
+        if (deg == candDeg) candCount++; else { candDeg = deg; candCount = 1; }
+        if (candCount >= 10) holdDeg = deg;
+    }
+
+    @Override
+    public void onAccuracyChanged(Sensor sensor, int accuracy) { }
+
+    /** Degrees clockwise the picture must be turned to stand upright, or -1 when not known yet. */
+    private int turn() {
+        int h = holdDeg;
+        if (h < 0) return -1;
+        return frontCam ? (sensorDeg - h + 360) % 360 : (sensorDeg + h) % 360;
+    }
+
     private String status() {
         Intent b = registerReceiver(null, new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
         int level = b == null ? -1 : b.getIntExtra(BatteryManager.EXTRA_LEVEL, -1);
@@ -331,12 +370,12 @@ public class CamService extends Service {
         int health = b == null ? 0 : b.getIntExtra(BatteryManager.EXTRA_HEALTH, 0);
         long age = frameTime == 0 ? -1 : System.currentTimeMillis() - frameTime;
         return String.format(Locale.ROOT,
-                "{\"app\":\"BigEye Cam\",\"version\":\"1.0.3\",\"model\":\"%s\",\"android\":\"%s\",\"battery_pct\":%d,"
+                "{\"app\":\"BigEye Cam\",\"version\":\"1.0.4\",\"model\":\"%s\",\"android\":\"%s\",\"battery_pct\":%d,"
                         + "\"charging\":%b,\"battery_temp_c\":%.1f,\"battery_health\":%d,\"width\":%d,\"height\":%d,"
-                        + "\"fps\":%d,\"quality\":%d,\"camera\":%d,\"torch\":%b,\"frame_age_ms\":%d,\"uptime_s\":%d}",
+                        + "\"fps\":%d,\"quality\":%d,\"camera\":%d,\"torch\":%b,\"frame_age_ms\":%d,\"uptime_s\":%d,\"turn\":%d}",
                 Build.MODEL.replace("\"", ""), Build.VERSION.RELEASE, scale > 0 ? level * 100 / scale : level,
                 plugged != 0, temp / 10.0, health, width, height, prefs.getInt("fps", 10), prefs.getInt("quality", 70),
-                prefs.getInt("camera", 0), torch, age, (System.currentTimeMillis() - started) / 1000);
+                prefs.getInt("camera", 0), torch, age, (System.currentTimeMillis() - started) / 1000, turn());
     }
 
     private static String param(String query, String key, String def) {

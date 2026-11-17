@@ -468,7 +468,9 @@ def phone_watch():
                     st = json.load(r)
                 if st.get("app") == "BigEye Cam":
                     st["t"] = time.time()
+                    prev = PHONE_STATUS.get(name) or {}
                     PHONE_STATUS[name] = st
+                    auto_turn(name, st.get("turn"), prev.get("turn"))
                     note_battery(name, st.get("battery_pct"), st.get("charging"))
             except Exception:
                 pass
@@ -586,6 +588,21 @@ def _wifi_job(name, ssid, password, sec):
         time.sleep(15)
     say("failed", f"the phone was not found after the switch to {ssid}. If it joined a network BigEye cannot reach, "
                   "pick another network on the phone itself")
+
+
+def auto_turn(name, turn, before):
+    """BigEye Cam 1.0.4+ says how the phone is held ("turn" = degrees clockwise to stand the picture up).
+    Unless the owner picked a fixed turn on the page, follow it (after two readings in a row, ~15 s apart)."""
+    if turn not in (0, 90, 180, 270) or turn != before:
+        return
+    o = settings(name).setdefault("orient", {"rotate": 0, "mirror": False})
+    if not o.get("auto", True) or o.get("rotate") == turn:
+        return
+    o["rotate"] = turn
+    save_settings()
+    CAMS[name].orient = dict(o)
+    CAMS[name].restart_reader()
+    log(f"{name}: the phone is held another way: picture turned {turn}°")
 
 
 def cam_label(name):
@@ -1841,8 +1858,14 @@ class Handler(BaseHTTPRequestHandler):
                 CAMS[name].restart_reader()       # the clock in the picture shows the name too
             if "rotate" in body or "mirror" in body:   # BigEye turns the picture itself: works for every camera
                 o = settings(name).setdefault("orient", {"rotate": 0, "mirror": False})
-                if body.get("rotate") in (0, 90, 180, 270):
+                if body.get("rotate") == "auto":      # phones: follow how the phone is held
+                    o["auto"] = True
+                    turn = (PHONE_STATUS.get(name) or {}).get("turn")
+                    if turn in (0, 90, 180, 270):
+                        o["rotate"] = turn
+                elif body.get("rotate") in (0, 90, 180, 270):
                     o["rotate"] = body["rotate"]
+                    o["auto"] = False
                 if "mirror" in body:
                     o["mirror"] = bool(body["mirror"])
                 CAMS[name].orient = dict(o)

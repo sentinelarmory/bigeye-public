@@ -775,13 +775,13 @@ CAMS.forEach(function (c) {
     var dn = seg([{label: 'On', v: true}, {label: 'Off', v: false}], function (o) { return post({denoise: o.v}, 'noise reduction ' + (o.v ? 'on' : 'off')); });
     var nb = seg([{label: 'Off', v: 0}, {label: 'Low', v: 1}, {label: 'High', v: 2}], function (o) { return post({night_boost: o.v}, 'night boost ' + o.label.toLowerCase()); });
     var os = seg([{label: 'On', v: true}, {label: 'Off', v: false}], function (o) { return post({osd: o.v}, 'date/time stamp ' + (o.v ? 'on' : 'off')); });
-    var rot = seg([{label: '0°', v: 0}, {label: '90° ↻', v: 90}, {label: '180°', v: 180}, {label: '90° ↺', v: 270}], function (o) { return post({rotate: o.v}, 'picture turned ' + o.label); });
+    var rot = seg((c.phone ? [{label: 'Auto', v: 'auto'}] : []).concat([{label: '0°', v: 0}, {label: '90° ↻', v: 90}, {label: '180°', v: 180}, {label: '90° ↺', v: 270}]), function (o) { return post({rotate: o.v}, o.v === 'auto' ? 'picture follows how the phone is held' : 'picture turned ' + o.label); });
     var mir = seg([{label: 'Off', v: false}, {label: 'On', v: true}], function (o) { return post({mirror: o.v}, 'mirror ' + (o.v ? 'on' : 'off')); });
     var hc = seg([{label: 'Show', v: false}, {label: 'Blur it', v: true}], function (o) { return post({hide_clock: o.v}, "camera's own clock " + (o.v ? 'blurred' : 'shown')); });
     json('/settings/' + n).then(function (m) { var e = m.enhance || {}; os.set(m.osd ? 'On' : 'Off'); hc.set(e.hide_clock ? 'Blur it' : 'Show');
-      var o = m.orient || {}; rot.set({0: '0°', 90: '90° ↻', 180: '180°', 270: '90° ↺'}[o.rotate || 0]); mir.set(o.mirror ? 'On' : 'Off'); fl.set(e.deflicker ? 'On' : 'Off'); dn.set(e.denoise ? 'On' : 'Off'); nb.set(['Off', 'Low', 'High'][e.night_boost || 0]); });
+      var o = m.orient || {}; rot.set(c.phone && o.auto !== false ? 'Auto' : {0: '0°', 90: '90° ↻', 180: '180°', 270: '90° ↺'}[o.rotate || 0]); mir.set(o.mirror ? 'On' : 'Off'); fl.set(e.deflicker ? 'On' : 'Off'); dn.set(e.denoise ? 'On' : 'Off'); nb.set(['Off', 'Low', 'High'][e.night_boost || 0]); });
     panel.appendChild(el('details', {}, [el('summary', {text: 'Picture help (BigEye)'}), el('div', {'class': 'panel', style: 'padding:0;margin-top:10px;gap:10px'}, [
-      row('Turn picture', [rot, el('span', {'class': 'hint', text: 'for a camera or phone mounted on its side or upside down'})]),
+      row('Turn picture', [rot, el('span', {'class': 'hint', text: 'Auto (phones): follows how the phone is held. Or pick a fixed turn for a camera mounted on its side or upside down'})]),
       row('Mirror', [mir]),
       row('Flicker fix', [fl, el('span', {'class': 'hint', text: 'smooths lamps pulsing on 50 Hz mains'})]),
       row('Noise reduction', [dn]),
