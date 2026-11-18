@@ -210,7 +210,7 @@ body.nvr #nvrside{top:44px}body.nvr #nvrside .brand{display:none}
 <span id="clock"></span><span class="sp"></span>
 <div class="seg" title="Open the folder on this PC"><button data-open="snapshots">📷 Pictures</button><button data-open="recordings">⏺ Recordings</button><button data-open="motion">🏃 Motion</button></div>
 <div class="seg" id="layout"><button data-l="cols1">1</button><button data-l="" class="on">2</button><button data-l="cols3">3</button></div>
-<button class="btn" id="autohome" title="Home when your face is recognised; Away a few minutes after a person at the exit cameras">Auto</button>
+<button class="btn" id="autohome" title="Home when your face is recognised; Away a few minutes after you are seen at the exit cameras">Auto</button>
 <div class="seg" id="homeseg" title="Home: nothing is recorded or sent. Away: people (and what you chose) are recorded."><button data-h="1">🏠 Home</button><button data-h="0">🛡 Away</button></div>
 <button class="btn" id="fixall" title="Restart the camera links on the camera machine (what helped when cameras dropped out)">🔄 Reconnect cameras</button>
 <button class="btn" id="autofix" title="Restart a camera's link by itself after 90 s without picture (at most every 10 min)">Auto-fix</button>
@@ -1747,9 +1747,9 @@ var SETPAGE = (function () {
     body.appendChild(card([
       row('Mode', [modeSeg, hint('Home: nothing is recorded or sent. Away: each camera records and alerts as set below.')]),
       row('Auto Home/Away', [autoSeg, hint('Away: set minutes after a person at the exit cameras. Home: as soon as a camera recognises your face (or your phone is on the home Wi-Fi).')]),
-      row('Go Away after', [mins, el('span', {text: 'min'}), minsSave, hint('minutes after the last person at an exit camera')]),
+      row('Go Away after', [mins, el('span', {text: 'min'}), minsSave, hint('minutes after you were last seen at an exit camera')]),
       row('Exit cameras', [exitBox]),
-      hint('A person at an exit camera starts the clock. When the minutes above pass, the system arms (Away). Only your known face disarms it (Home). People inside, or on the TV, do not count.')]));
+      hint('Your known face at an exit camera starts the clock (strangers in the hallway do not). When the minutes above pass, the system arms (Away). Your face seen again disarms it (Home). People inside, or on the TV, do not count.')]));
     body.appendChild(el('h3', {text: 'What each camera does'}));
     var tb = el('tbody');
     names().forEach(function (n) {

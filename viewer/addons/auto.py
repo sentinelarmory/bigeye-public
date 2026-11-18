@@ -147,22 +147,23 @@ class Addon:
             self.phone_away_since = None
         away_after = page.get("away_after_min", 45) * 60
         exits = page.get("exit_cams") or ["door", "phone2", "phone1"]
-        # Owner's rule: the exit cameras are the trigger. A person seen by an exit camera starts the clock;
+        # Owner's rule: the exit cameras are the trigger. Your known face at an exit camera starts the clock;
         # after away_after quiet minutes at the exits the system arms. Only a known face disarms it (above).
         # People seen inside (or on the TV) never stop or start anything.
         for name in exits:
             for d in (self.ctx.status.get(name, {}).get("ai") or {}).get("found", []) or []:
-                if d.get("label") == "person":
+                if d.get("label") == "person" and d.get("name") and not d.get("pet"):   # you, not a random person
                     if not getattr(self, "exit_seen", 0):
-                        self.ctx.log(f"auto home: person at the {name} camera, Away in {away_after // 60} min unless a known face is seen")
+                        self.ctx.log(f"auto home: {d.get('name')} seen at the {name} camera, Away in {away_after // 60} min unless seen inside")
                     self.exit_seen = now
+                    self.exit_known = now
         es = getattr(self, "exit_seen", 0)
-        if es and self.last_known > es:   # you were recognised after going past the exits: still home
+        if es and self.last_known > getattr(self, "exit_known", 0) + 5 and self.last_known > es:   # recognised again after the exits (inside or back): still home
             self.exit_seen = 0
             return
         if home and es and now - es > away_after:
             self.exit_seen = 0
-            self.ctx.set_home(False, f"auto: {int((now - es) / 60)} min since a person at the exit cameras, no known face since")
+            self.ctx.set_home(False, f"auto: {int((now - es) / 60)} min since you were seen at the exit cameras, not seen since")
             return
         if not home:
             self.exit_seen = 0
