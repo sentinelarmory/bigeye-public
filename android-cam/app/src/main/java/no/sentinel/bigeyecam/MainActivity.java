@@ -55,7 +55,8 @@ public class MainActivity extends Activity {
         box.addView(start);
         box.addView(stop);
         setContentView(box);
-        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        // No FLAG_KEEP_SCREEN_ON: the camera runs in the service (with its own wake lock), and a lit screen next to a
+        // window shines into the picture. The screen may sleep; BigEye can switch it on and off over ADB.
 
         if (Build.VERSION.SDK_INT >= 23) {
             String[] want = Build.VERSION.SDK_INT >= 33

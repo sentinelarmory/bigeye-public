@@ -45,8 +45,12 @@ import java.util.Locale;
  *   /snapshot.jpg  the newest picture
  *   /status        JSON: battery, charging, battery temperature, size, fps, uptime, and "turn": how many degrees
  *                  clockwise the picture must be turned to stand upright (from the phone's gravity sensor)
- *   /torch?on=1|0  the phone's light
+ *   /torch?on=1|0  the phone's light (refused while locked: /config?torch_lock=1, the default, because the light
+ *                  shines back from a window and blinds the camera; only a person unlocks it, nothing automatic)
  *   /config?size=1280x720&fps=10&quality=70&camera=0|1   (saved, camera restarts)
+ *   /config?spot=0.2,0.5   far focus aimed once at that point of the raw picture (0-1 across, down), then held
+ *   /config?focus=auto|far   auto: the lens follows what is sharpest; far: lens set to the distance, so dirt or
+ *                  rain on a window it films through stays soft and what is outside stays sharp (saved, no restart)
  *
  * No cloud, no account, no ads: it only answers on the network the phone is on (BigEye puts it on the camera Wi-Fi,
  * which has no way out).
@@ -70,6 +74,8 @@ public class CamService extends Service implements SensorEventListener {
     private int width, height;
     private long lastEncode;
     private volatile boolean torch;
+    private volatile String lensMode = "";
+    private volatile String lensModes = "";
     private SharedPreferences prefs;
     private SensorManager sensors;
     private volatile int sensorDeg = 90;      // the camera chip's own turn (Camera.CameraInfo.orientation)
@@ -171,9 +177,8 @@ public class CamService extends Service implements SensorEventListener {
             Camera.Size s = pick(p.getSupportedPreviewSizes(), prefs.getString("size", "1280x720"));
             p.setPreviewSize(s.width, s.height);
             p.setPreviewFormat(ImageFormat.NV21);
-            List<String> focus = p.getSupportedFocusModes();
-            if (focus != null && focus.contains(Camera.Parameters.FOCUS_MODE_CONTINUOUS_VIDEO))
-                p.setFocusMode(Camera.Parameters.FOCUS_MODE_CONTINUOUS_VIDEO);
+            lensMode = setFocus(p);
+            lensModes = p.getSupportedFocusModes() == null ? "" : android.text.TextUtils.join(",", p.getSupportedFocusModes());
             if (p.isVideoStabilizationSupported()) p.setVideoStabilization(false);
             // The chip itself should not run faster than needed: at 30 fps it works (and heats) for pictures we drop.
             // Pick the slowest range that still covers the asked frame rate (A15: 15-30 -> 15-15, about half the work).
@@ -201,6 +206,7 @@ public class CamService extends Service implements SensorEventListener {
             for (int i = 0; i < 3; i++) camera.addCallbackBuffer(new byte[bytes]);
             camera.setPreviewCallbackWithBuffer(this::onFrame);
             camera.startPreview();
+            if ("far".equals(prefs.getString("focus", "auto"))) applyFocus();   // a spot needs one focus run once the picture runs
         } catch (Exception e) {
             closeCamera();
             if (running) camHandler.postDelayed(this::openCamera, 5000);   // busy or failed: try again
@@ -247,6 +253,53 @@ public class CamService extends Service implements SensorEventListener {
             }
         }
         cam.addCallbackBuffer(data);
+    }
+
+    /** Focus as saved: "far" picks the lens' distance setting (infinity, else fixed), "auto" follows the scene. */
+    @SuppressWarnings("deprecation")
+    private String setFocus(Camera.Parameters p) {
+        List<String> modes = p.getSupportedFocusModes();
+        if (modes == null) return "none";
+        if ("far".equals(prefs.getString("focus", "auto"))) {
+            for (String m : new String[]{Camera.Parameters.FOCUS_MODE_INFINITY, Camera.Parameters.FOCUS_MODE_FIXED})
+                if (modes.contains(m)) { p.setFocusMode(m); return m; }
+            // No distance setting (A15): "auto" without a focus request leaves the lens parked where the phone keeps
+            // it at rest, which is the far end on most phones. It stops hunting for the dirt on the glass.
+            if (modes.contains(Camera.Parameters.FOCUS_MODE_AUTO)) {
+                p.setFocusMode(Camera.Parameters.FOCUS_MODE_AUTO);
+                // A spot (0-1 across and down the raw picture) on something far away: focus there once, then hold.
+                String spot = prefs.getString("spot", "");
+                if (!spot.isEmpty() && p.getMaxNumFocusAreas() > 0) {
+                    String[] xy = spot.split(",");
+                    int cx = (int) (Float.parseFloat(xy[0]) * 2000 - 1000), cy = (int) (Float.parseFloat(xy[1]) * 2000 - 1000);
+                    int l = Math.max(-1000, cx - 150), t = Math.max(-1000, cy - 150);
+                    java.util.ArrayList<Camera.Area> a = new java.util.ArrayList<>();
+                    a.add(new Camera.Area(new Rect(l, t, Math.min(1000, l + 300), Math.min(1000, t + 300)), 1000));
+                    p.setFocusAreas(a);
+                    return "spot";
+                }
+                return "parked";
+            }
+        }
+        if (modes.contains(Camera.Parameters.FOCUS_MODE_CONTINUOUS_VIDEO)) {
+            p.setFocusMode(Camera.Parameters.FOCUS_MODE_CONTINUOUS_VIDEO);
+            return Camera.Parameters.FOCUS_MODE_CONTINUOUS_VIDEO;
+        }
+        return p.getFocusMode();
+    }
+
+    @SuppressWarnings("deprecation")
+    private void applyFocus() {
+        camHandler.post(() -> {
+            if (camera == null) return;
+            try {
+                Camera.Parameters p = camera.getParameters();
+                lensMode = setFocus(p);
+                camera.setParameters(p);
+                camera.cancelAutoFocus();
+                if ("spot".equals(lensMode)) camera.autoFocus((ok, cam) -> lensMode = ok ? "spot" : "spot (not sure)");
+            } catch (Exception ignored) { }
+        });
     }
 
     @SuppressWarnings("deprecation")
@@ -305,20 +358,28 @@ public class CamService extends Service implements SensorEventListener {
                 case "/status": json(out, status()); break;
                 case "/torch": {
                     boolean on = param(query, "on", "0").equals("1");
+                    boolean locked = prefs.getBoolean("torch_lock", true);
+                    if (on && locked) { setTorch(false); json(out, "{\"torch\":false,\"torch_lock\":true}"); break; }
                     setTorch(on);
-                    json(out, "{\"torch\":" + on + "}");
+                    json(out, "{\"torch\":" + on + ",\"torch_lock\":" + locked + "}");
                     break;
                 }
                 case "/config": {
                     SharedPreferences.Editor e = prefs.edit();
                     String size = param(query, "size", null), fps = param(query, "fps", null), q = param(query, "quality", null),
-                            cam = param(query, "camera", null);
+                            cam = param(query, "camera", null), foc = param(query, "focus", null);
+                    if (foc != null && foc.matches("auto|far")) e.putString("focus", foc);
+                    String tl = param(query, "torch_lock", null);
+                    if (tl != null && tl.matches("[01]")) { e.putBoolean("torch_lock", tl.equals("1")); if (tl.equals("1")) setTorch(false); }
+                    String spot = param(query, "spot", null);
+                    if (spot != null && (spot.isEmpty() || spot.matches("0?\\.\\d{1,3},0?\\.\\d{1,3}"))) { e.putString("spot", spot); if (foc == null) foc = "far"; e.putString("focus", foc); }
                     if (size != null && size.matches("\\d{3,4}x\\d{3,4}")) e.putString("size", size);
                     if (fps != null && fps.matches("\\d{1,2}")) e.putInt("fps", Integer.parseInt(fps));
                     if (q != null && q.matches("\\d{2}")) e.putInt("quality", Integer.parseInt(q));
                     if (cam != null && cam.matches("[01]")) e.putInt("camera", Integer.parseInt(cam));
                     e.apply();
                     if (size != null || cam != null) camHandler.post(() -> { closeCamera(); openCamera(); });
+                    else if (foc != null) applyFocus();
                     json(out, status());
                     break;
                 }
@@ -384,12 +445,13 @@ public class CamService extends Service implements SensorEventListener {
         int health = b == null ? 0 : b.getIntExtra(BatteryManager.EXTRA_HEALTH, 0);
         long age = frameTime == 0 ? -1 : System.currentTimeMillis() - frameTime;
         return String.format(Locale.ROOT,
-                "{\"app\":\"BigEye Cam\",\"version\":\"1.0.5\",\"model\":\"%s\",\"android\":\"%s\",\"battery_pct\":%d,"
+                "{\"app\":\"BigEye Cam\",\"version\":\"1.0.7\",\"model\":\"%s\",\"android\":\"%s\",\"battery_pct\":%d,"
                         + "\"charging\":%b,\"battery_temp_c\":%.1f,\"battery_health\":%d,\"width\":%d,\"height\":%d,"
-                        + "\"fps\":%d,\"quality\":%d,\"camera\":%d,\"torch\":%b,\"frame_age_ms\":%d,\"uptime_s\":%d,\"turn\":%d}",
+                        + "\"fps\":%d,\"quality\":%d,\"camera\":%d,\"torch\":%b,\"frame_age_ms\":%d,\"uptime_s\":%d,\"turn\":%d,\"focus\":\"%s\",\"lens\":\"%s\",\"lens_modes\":\"%s\",\"torch_lock\":%b}",
                 Build.MODEL.replace("\"", ""), Build.VERSION.RELEASE, scale > 0 ? level * 100 / scale : level,
                 plugged != 0, temp / 10.0, health, width, height, prefs.getInt("fps", 10), prefs.getInt("quality", 70),
-                prefs.getInt("camera", 0), torch, age, (System.currentTimeMillis() - started) / 1000, turn());
+                prefs.getInt("camera", 0), torch, age, (System.currentTimeMillis() - started) / 1000, turn(),
+                prefs.getString("focus", "auto"), lensMode, lensModes, prefs.getBoolean("torch_lock", true));
     }
 
     private static String param(String query, String key, String def) {

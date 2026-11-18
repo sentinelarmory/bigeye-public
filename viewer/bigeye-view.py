@@ -542,6 +542,36 @@ def phone_handle(name):
     return phone_wifi.Phone(ip, via, SSH_ROUTES)
 
 
+def _phone_app(name, path):
+    """Ask the BigEye Cam app on a phone camera (its own small web server) and return its JSON answer."""
+    base = str(CAMS[name].url)[: -len("cam.mjpg")]
+    with urllib.request.urlopen(base + path, timeout=6) as r:
+        return json.loads(r.read().decode() or "{}")
+
+
+def phone_power(name):
+    """The phone's screen (read over ADB) and its light (asked from the app)."""
+    out = phone_handle(name).shell("dumpsys power | grep -m1 mWakefulness=; settings get global stay_on_while_plugged_in", timeout=20)
+    lines = [x.strip() for x in out.splitlines() if x.strip()]
+    awake = any(x.endswith("=Awake") for x in lines)
+    stay = next((x for x in lines if x.isdigit()), "0") != "0"
+    try:
+        st = _phone_app(name, "status")
+    except Exception:
+        st = {}
+    return {"screen": "on" if awake else "off", "stay_on": stay,
+            "torch": bool(st.get("torch")), "torch_lock": st.get("torch_lock", None)}
+
+
+def phone_screen(name, on):
+    """Screen on or off. Off also stops "stay awake while charging", or the phone lights itself up again."""
+    if on:
+        phone_handle(name).shell("settings put global stay_on_while_plugged_in 15; input keyevent KEYCODE_WAKEUP", timeout=20)
+    else:
+        phone_handle(name).shell("settings put global stay_on_while_plugged_in 0; input keyevent KEYCODE_SLEEP", timeout=20)
+    log(f"{name}: phone screen {'on' if on else 'off'} (from the page)")
+
+
 def wifi_info(name):
     p = phone_handle(name)
     cur = p.status()
@@ -1552,6 +1582,33 @@ class Handler(BaseHTTPRequestHandler):
         except Exception as error:
             self._send(502, str(error).encode())
 
+    def _phonectl(self, parts):
+        """Screen and light of a phone camera. The light only goes on when a person first unlocks it here."""
+        name = parts[0] if parts else ""
+        if name not in CAMS or not is_phone(name):
+            return self._json({"error": "not a phone camera"}, 404)
+        try:
+            if len(parts) == 1:
+                return self._json(phone_power(name))
+            body = self._body_json() if self.command == "POST" else None
+            if body is None:
+                return self._json({"error": "POST only"}, 405)
+            if parts[1] == "screen":
+                phone_screen(name, bool(body.get("on")))
+            elif parts[1] == "light":
+                if "lock" in body:
+                    _phone_app(name, "config?torch_lock=" + ("1" if body.get("lock") else "0"))
+                    log(f"{name}: phone light {'locked' if body.get('lock') else 'UNLOCKED'} (from the page)")
+                if "on" in body:
+                    r = _phone_app(name, "torch?on=" + ("1" if body.get("on") else "0"))
+                    if body.get("on") and not r.get("torch"):
+                        return self._json({"error": "the light is locked: unlock it first", **phone_power(name)}, 409)
+            else:
+                return self._json({"error": "unknown"}, 404)
+            return self._json(phone_power(name))
+        except Exception as error:
+            return self._json({"error": str(error)[:200]}, 502)
+
     def _wifi(self, parts):
         name = parts[0] if parts else ""
         if name not in CAMS or not is_phone(name):
@@ -2016,6 +2073,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._state()
         if path.startswith("wifi/"):
             return self._wifi(path.split("/")[1:])
+        if path.startswith("phonectl/"):
+            return self._phonectl(path.split("/")[1:])
         if path.startswith("app/"):
             return self._app(path[4:])
         if path == "telemetry":

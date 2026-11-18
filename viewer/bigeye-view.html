@@ -888,6 +888,35 @@ CAMS.forEach(function (c) {
         el('span', {'class': 'hint', text: 'Home Wi-Fi (5 GHz best) keeps the camera Wi-Fi free for the cheap cameras. If a new network does not work, the phone goes back to the one it knew.'})]),
       wNow, wList, wJob])]));
     wPoll();
+    // ---- the phone's own screen and light: both shine back from a window into the picture, so they stay off
+    var pState = el('div', {'class': 'hint', text: 'Reading the phone…'});
+    var pApply = function (s) {
+      if (!s || s.error) { pState.textContent = '⚠ ' + ((s && s.error) || 'no answer') + ' — wireless debugging must be on (port 5555)'; if (!s || !s.screen) return; }
+      scr.set(s.screen === 'on' ? 'On' : 'Off');
+      lock.set(s.torch_lock === false ? 'Unlocked' : 'Locked');
+      lightBtn.textContent = s.torch ? 'Turn light off' : 'Turn light on';
+      lightBtn.disabled = s.torch_lock !== false && !s.torch;
+      pState.textContent = 'Screen ' + s.screen + (s.stay_on ? ' (kept awake while charging)' : '') + ' · light ' + (s.torch ? 'ON' : 'off')
+        + (s.torch_lock === null ? ' · update BigEye Cam on the phone for the light lock' : '');
+    };
+    var pLoad = function () { wj('/phonectl/' + n).then(pApply); };
+    var scr = seg([{label: 'Off', v: false}, {label: 'On', v: true}], function (o) {
+      return wj('/phonectl/' + n + '/screen', {on: o.v}).then(function (s) { pApply(s); if (s && !s.error) toast(title(n) + ': phone screen ' + (o.v ? 'on' : 'off'), 'ok'); return !(s && s.error); });
+    });
+    var lock = seg([{label: 'Locked', v: true}, {label: 'Unlocked', v: false}], function (o) {
+      if (!o.v && !confirm('Unlock the light on ' + title(n) + '?\n\nWARNING: behind a window the light shines straight back into the camera and the picture goes white. Only unlock it for a moment, by hand.')) return false;
+      return wj('/phonectl/' + n + '/light', {lock: o.v, on: false}).then(function (s) { pApply(s); return !(s && s.error); });
+    });
+    var lightBtn = el('button', {'class': 'btn', text: 'Turn light on', disabled: true, onclick: function () {
+      var on = lightBtn.textContent === 'Turn light on';
+      wj('/phonectl/' + n + '/light', {on: on}).then(function (s) { pApply(s); if (s && s.error) toast(title(n) + ': ' + s.error, 'bad'); });
+    }});
+    panel.appendChild(el('details', {}, [el('summary', {text: 'Screen and light (phone)'}), el('div', {'class': 'panel', style: 'padding:0;margin-top:10px;gap:10px'}, [
+      el('div', {'class': 'hint', style: 'color:var(--bad, #e5484d);font-weight:600', text: '⚠ Do not touch while the phone films through a window: a lit screen or the light reflects in the glass and spoils the picture. Keep both off.'}),
+      row('Screen', [scr, el('span', {'class': 'hint', text: 'Off = dark and not woken by charging. The camera keeps filming with the screen off.'})]),
+      row('Light', [lock, lightBtn, el('span', {'class': 'hint', text: 'Locked = nothing can switch the light on, not BigEye and no automation. Unlock only by hand.'})]),
+      pState])]));
+    pLoad();
   }
   // ---- the name shown on the page, in the picture's clock and in alerts (settings stay with the camera)
   var nameIn = el('input', {'class': 'btn', value: title(n), maxlength: 24, style: 'flex:1;min-width:140px', 'aria-label': 'Camera name'});
