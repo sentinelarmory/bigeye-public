@@ -129,7 +129,8 @@ class Addon:
             for d in (self.ctx.status.get(name, {}).get("ai") or {}).get("found", []) or []:
                 if d.get("label") == "person":
                     self.last_person = (now, name)
-                    if d.get("name") and not d.get("pet"):
+                    hh = self.ctx.page_settings().get("household") or []
+                    if d.get("name") and not d.get("pet") and (not hh or d.get("name") in hh):   # guests do not switch
                         self.last_known = now
         if not page.get("auto_home"):
             return
@@ -152,7 +153,8 @@ class Addon:
         # People seen inside (or on the TV) never stop or start anything.
         for name in exits:
             for d in (self.ctx.status.get(name, {}).get("ai") or {}).get("found", []) or []:
-                if d.get("label") == "person" and d.get("name") and not d.get("pet"):   # you, not a random person
+                hh = page.get("household") or []
+                if d.get("label") == "person" and d.get("name") and not d.get("pet") and (not hh or d.get("name") in hh):   # you, not a random person
                     if not getattr(self, "exit_seen", 0):
                         self.ctx.log(f"auto home: {d.get('name')} seen at the {name} camera, Away in {away_after // 60} min unless seen inside")
                     self.exit_seen = now

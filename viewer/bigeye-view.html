@@ -1800,6 +1800,42 @@ var SETPAGE = (function () {
     body.appendChild(el('h3', {text: 'Faces and animals'}));
     body.appendChild(card([row('Known faces', [el('button', {'class': 'btn', text: '👑 Faces, people not named yet, animals', onclick: function () { openPanel('#gear'); }})]),
       hint('Your face is stored once for the whole system: every camera compares against the same list.')]));
+    // ---- people: who the system knows, add a friend or family member, who counts as living here
+    body.appendChild(el('h3', {text: 'People'}));
+    var pList = el('div', {style: 'display:grid;gap:8px'});
+    var hh = null;
+    var loadP = function () { Promise.all([json('/faces'), json('/household')]).then(function (r) {
+      var faces = r[0], h = r[1]; hh = h.names; pList.textContent = '';
+      var ns = Object.keys(faces).filter(function (k) { return k !== 'error'; });
+      if (!ns.length) pList.appendChild(hint('Nobody yet. Add yourself first.'));
+      ns.forEach(function (nm) {
+        var lives = h.all ? true : hh.indexOf(nm) >= 0;
+        pList.appendChild(row(nm, [el('span', {'class': 'hint', text: faces[nm] + ' pictures'}),
+          seg([{label: '🏠 Lives here', v: true}, {label: '👋 Guest', v: false}], function (o) {
+            var list = (h.all ? ns : hh).filter(function (x) { return x !== nm; }); if (o.v) list.push(nm);
+            return postJSON('/household', {names: list}).then(function (r2) { h = r2; hh = r2.names; toast(nm + (o.v ? ' lives here: switches Home/Away' : ' is a guest: recognised, never an alarm, does not switch Home/Away'), 'ok'); return true; }); },
+            lives ? '🏠 Lives here' : '👋 Guest'),
+          el('button', {'class': 'btn', text: '🗑 Forget', onclick: function () {
+            if (!confirm('Forget ' + nm + '? All ' + faces[nm] + ' pictures of this face are removed.')) return;
+            json('/faces/delete?name=' + encodeURIComponent(nm), {method: 'POST'}).then(function () { toast(nm + ' forgotten', 'ok'); loadP(); }); }})]));
+      });
+    }).catch(function () { pList.textContent = '⚠ the AI service did not answer'; }); };
+    loadP();
+    var newName = el('input', {'class': 'btn', placeholder: 'Name, e.g. Mum', maxlength: 30, style: 'flex:1;min-width:140px'});
+    var newCam = el('select', {}, names().map(function (n) { return el('option', {value: n, text: title(n)}); }));
+    var learn = el('button', {'class': 'btn', text: '📸 Learn from this camera now', onclick: function () {
+      var nm = newName.value.trim(); if (!nm) { toast('Type a name first', 'bad'); return; }
+      learn.disabled = true; learn.textContent = 'Looking…';
+      json('/faces/enroll/' + newCam.value + '?name=' + encodeURIComponent(nm), {method: 'POST'}).then(function (r) {
+        toast(r.error ? title(newCam.value) + ': ' + r.error : nm + ' now has ' + r.samples + ' picture(s). Take 3-5 from different cameras and angles.', r.error ? 'bad' : 'ok');
+        if (!r.error) loadP(); }).catch(function () { toast('The AI service did not answer', 'bad'); })
+        .then(function () { learn.disabled = false; learn.textContent = '📸 Learn from this camera now'; });
+    }});
+    body.appendChild(card([pList,
+      el('b', {text: 'Add a person (or more pictures of someone)'}),
+      row('Name', [newName]), row('Camera', [newCam, learn]),
+      hint('The person stands alone in front of the chosen camera and looks at it. Take a few pictures from different cameras and angles. Or name someone the cameras already saw, below.'),
+      hint('Lives here: their face switches Home/Away. Guest: recognised and never an alarm, but does not switch Home/Away.')]));
     // ---- training: recognised, but only just (new angle, other light) -> added, so every camera learns you
     body.appendChild(el('h3', {text: 'Face training'}));
     var tSeg = seg([{label: 'On', v: true}, {label: 'Off', v: false}], function (o) {
@@ -1849,6 +1885,27 @@ var SETPAGE = (function () {
       });
     }).catch(function () { mHint.textContent = '⚠ the AI service did not answer'; });
     body.appendChild(card([mHint, mGrid]));
+    body.appendChild(el('h3', {text: 'People the cameras saw, not named yet'}));
+    var uGrid = el('div', {style: 'display:flex;flex-wrap:wrap;gap:10px'});
+    json('/faces/unknown').then(function (r) {
+      var g = (r.groups || []).slice(0, 30);
+      if (!g.length) uGrid.appendChild(hint('Nobody unnamed right now.'));
+      g.forEach(function (x) {
+        var inp = el('input', {'class': 'btn', placeholder: 'Name', maxlength: 30, style: 'width:110px;padding:3px 6px;font-size:12px'});
+        var box = el('div', {style: 'display:grid;gap:4px;justify-items:center;width:120px'}, [
+          el('img', {src: '/faces/unknown/picture?id=' + encodeURIComponent(x.id), style: 'width:110px;height:110px;object-fit:cover;border-radius:8px', loading: 'lazy'}),
+          el('span', {'class': 'hint', style: 'font-size:11px', text: 'seen ' + x.count + '×'}), inp,
+          el('div', {style: 'display:flex;gap:4px'}, [
+            el('button', {'class': 'btn', text: 'Save', style: 'padding:2px 8px;font-size:12px', onclick: function () {
+              var nm = inp.value.trim(); if (!nm) { inp.focus(); return; }
+              json('/faces/unknown/name?id=' + encodeURIComponent(x.id) + '&name=' + encodeURIComponent(nm), {method: 'POST'}).then(function (res) {
+                toast(res.error || (nm + ' now has ' + res.samples + ' pictures'), res.error ? 'bad' : 'ok'); if (!res.error) { box.remove(); loadP(); } }); }}),
+            el('button', {'class': 'btn', text: '×', title: 'Forget this face', style: 'padding:2px 8px;font-size:12px', onclick: function () {
+              json('/faces/unknown/delete?id=' + encodeURIComponent(x.id), {method: 'POST'}).then(function () { box.remove(); }); }})])]);
+        uGrid.appendChild(box);
+      });
+    }).catch(function () { uGrid.appendChild(hint('⚠ the AI service did not answer')); });
+    body.appendChild(card([uGrid, hint('Type a name to make it a known face: a friend, family, the postman. × forgets it. Unnamed faces not seen for 30 days are dropped.')]));
   };
   R.phones = function () {
     body.appendChild(el('h3', {text: 'Phone cameras'}));

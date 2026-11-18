@@ -2250,6 +2250,16 @@ class Handler(BaseHTTPRequestHandler):
                 save_settings()
             return self._json({"on": page.get("auto_home", False), "away_after_min": page.get("away_after_min", 45),
                                "exit_cams": page.get("exit_cams") or ["door", "phone2", "phone1"]})
+        if path == "household":   # names whose face switches Home/Away; [] or missing = everyone known
+            page = SETTINGS.setdefault("_page", {})
+            if self.command == "POST":
+                body = self._body_json() or {}
+                if isinstance(body.get("names"), list):
+                    page["household"] = [str(x)[:30] for x in body["names"]][:50]
+                    save_settings()
+                    log(f"household: {', '.join(page['household']) or 'everyone known'}")
+            hh = page.get("household")
+            return self._json({"all": not hh, "names": hh or []})
         if path == "facetraining":
             page = SETTINGS.setdefault("_page", {})
             if self.command == "POST":
