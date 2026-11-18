@@ -2180,6 +2180,17 @@ class Handler(BaseHTTPRequestHandler):
                                                  data=frame, headers={"Content-Type": "image/jpeg"})
                 elif len(parts) == 2 and parts[1] == "delete" and self.command == "POST":
                     req = f"http://127.0.0.1:8771/faces/delete?name={urllib.parse.quote(q.get('name', ''))}"
+                elif len(parts) >= 2 and parts[1] == "training":  # face training: what was added, its pictures, undo
+                    tid = urllib.parse.quote(q.get("id", ""))
+                    if len(parts) == 3 and parts[2] == "picture":
+                        with urllib.request.urlopen(f"http://127.0.0.1:8771/faces/training/picture?id={tid}", timeout=10) as reply:
+                            return self._send(200, reply.read(), "image/jpeg")
+                    if len(parts) == 3 and parts[2] == "undo" and self.command == "POST":
+                        req = f"http://127.0.0.1:8771/faces/training/undo?id={tid}"
+                    elif len(parts) == 2:
+                        req = "http://127.0.0.1:8771/faces/training"
+                    else:
+                        return self.send_error(404)
                 elif len(parts) >= 2 and parts[1] == "unknown":  # people seen but not named (the AI groups them)
                     gid = urllib.parse.quote(q.get("id", ""))
                     if len(parts) == 3 and parts[2] == "picture":
@@ -2239,6 +2250,19 @@ class Handler(BaseHTTPRequestHandler):
                 save_settings()
             return self._json({"on": page.get("auto_home", False), "away_after_min": page.get("away_after_min", 45),
                                "exit_cams": page.get("exit_cams") or ["door", "phone2", "phone1"]})
+        if path == "facetraining":
+            page = SETTINGS.setdefault("_page", {})
+            if self.command == "POST":
+                body = self._body_json() or {}
+                if isinstance(body.get("on"), bool):
+                    page["face_training"] = body["on"]
+                if isinstance(body.get("cams"), list):
+                    page["face_training_cams"] = [c for c in body["cams"] if c in CAMS]
+                save_settings()
+                log(f"face training {'on' if page.get('face_training', True) else 'off'}, cameras: {page.get('face_training_cams') or 'all but cam360'}")
+            cams = page.get("face_training_cams")
+            return self._json({"on": page.get("face_training", True),
+                               "cams": cams if isinstance(cams, list) else [c for c in CAMS if c != "cam360"]})
         if path == "home":
             page = SETTINGS.setdefault("_page", {})
             if self.command == "POST":

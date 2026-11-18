@@ -1799,7 +1799,56 @@ var SETPAGE = (function () {
   R.faces = function () {
     body.appendChild(el('h3', {text: 'Faces and animals'}));
     body.appendChild(card([row('Known faces', [el('button', {'class': 'btn', text: '👑 Faces, people not named yet, animals', onclick: function () { openPanel('#gear'); }})]),
-      hint('Known faces switch to Home and are never an alarm. Name new people so they stop counting as strangers.')]));
+      hint('Your face is stored once for the whole system: every camera compares against the same list.')]));
+    // ---- training: recognised, but only just (new angle, other light) -> added, so every camera learns you
+    body.appendChild(el('h3', {text: 'Face training'}));
+    var tSeg = seg([{label: 'On', v: true}, {label: 'Off', v: false}], function (o) {
+      return postJSON('/facetraining', {on: o.v}).then(function () { toast('Face training ' + (o.v ? 'on' : 'off'), 'ok'); return true; }); });
+    var tCams = el('div', {'class': 'row', style: 'gap:14px'});
+    var tStat = el('div', {'class': 'hint', text: 'reading…'});
+    var tGrid = el('div', {style: 'display:flex;flex-wrap:wrap;gap:8px'});
+    json('/facetraining').then(function (t) {
+      tSeg.set(t.on ? 'On' : 'Off');
+      names().forEach(function (n) {
+        var cb = el('input', {type: 'checkbox'}); cb.checked = t.cams.indexOf(n) >= 0; cb.dataset.c = n;
+        cb.onchange = function () { var list = names().filter(function (x) { var b = tCams.querySelector('[data-c="' + x + '"]'); return b && b.checked; });
+          postJSON('/facetraining', {cams: list}).then(function () { toast('Training from: ' + (list.map(title).join(', ') || 'no camera'), 'ok'); }); };
+        tCams.appendChild(el('label', {style: 'display:flex;gap:6px;align-items:center'}, [cb, el('span', {text: title(n)})]));
+      });
+    });
+    var loadT = function () { json('/faces/training').then(function (r) {
+      if (r.error) { tStat.textContent = '⚠ ' + r.error; return; }
+      tStat.textContent = r.total + ' pictures learned so far (' + r.today + ' today) · at most ' + r.per_cam_day + ' per camera a day, ' + r.cap + ' in all';
+      tGrid.textContent = '';
+      (r.recent || []).forEach(function (a) {
+        var img = el('img', {src: '/faces/training/picture?id=' + encodeURIComponent(a.id), style: 'width:84px;height:84px;object-fit:cover;border-radius:8px;display:block', loading: 'lazy'});
+        var und = el('button', {'class': 'btn', text: '× Not me', style: 'padding:2px 6px;font-size:12px', onclick: function () {
+          json('/faces/training/undo?id=' + encodeURIComponent(a.id), {method: 'POST'}).then(function () { toast('Removed from ' + a.name, 'ok'); loadT(); }); }});
+        tGrid.appendChild(el('div', {style: 'display:grid;gap:4px;justify-items:center;width:90px'}, [img,
+          el('span', {'class': 'hint', style: 'font-size:11px;text-align:center', text: title(a.cam) + ' · ' + new Date(a.t * 1000).toLocaleDateString()}), und]));
+      });
+    }).catch(function () { tStat.textContent = '⚠ the AI service did not answer'; }); };
+    loadT();
+    body.appendChild(card([row('Training', [tSeg, hint('when a camera recognises you, but only just (new angle, other light, seen from above), that look is added to your face, a few per camera a day')]),
+      row('Learn from', [tCams]), tStat, tGrid,
+      hint('Wrong one? "× Not me" removes it again. The 360 in the living room is left out by default.')]));
+    // ---- people not named yet that look a lot like a known face: one tap adds them
+    body.appendChild(el('h3', {text: 'Might be you?'}));
+    var mGrid = el('div', {style: 'display:flex;flex-wrap:wrap;gap:10px'});
+    var mHint = hint('reading…');
+    json('/faces/unknown').then(function (r) {
+      var g = (r.groups || []).filter(function (x) { return x.near && x.near_sim >= 0.25; }).sort(function (a, b) { return b.near_sim - a.near_sim; }).slice(0, 12);
+      mHint.textContent = g.length ? 'Faces the cameras saw that come close to a known face. Tap "It\'s me" to teach it (all its pictures are added).' : 'Nothing close to a known face right now.';
+      g.forEach(function (x) {
+        mGrid.appendChild(el('div', {style: 'display:grid;gap:4px;justify-items:center;width:110px'}, [
+          el('img', {src: '/faces/unknown/picture?id=' + encodeURIComponent(x.id), style: 'width:100px;height:100px;object-fit:cover;border-radius:8px', loading: 'lazy'}),
+          el('span', {'class': 'hint', style: 'font-size:11px;text-align:center', text: x.near + '? ' + Math.round(x.near_sim * 100) + '% · seen ' + x.count + '×'}),
+          el('button', {'class': 'btn', text: "✓ It's " + x.near.split(' ')[0], style: 'padding:3px 6px;font-size:12px', onclick: function (e) {
+            json('/faces/unknown/name?id=' + encodeURIComponent(x.id) + '&name=' + encodeURIComponent(x.near), {method: 'POST'}).then(function (res) {
+              toast(res.error ? res.error : x.near + ' now has ' + res.samples + ' pictures', res.error ? 'bad' : 'ok'); if (!res.error) e.target.closest('div').remove(); }); }})]));
+      });
+    }).catch(function () { mHint.textContent = '⚠ the AI service did not answer'; });
+    body.appendChild(card([mHint, mGrid]));
   };
   R.phones = function () {
     body.appendChild(el('h3', {text: 'Phone cameras'}));

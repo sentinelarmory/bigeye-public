@@ -41,7 +41,7 @@ FACES_FILE = os.path.expanduser("~/.config/sentinel-bigeye/" + ("faces.json" if 
 FACE_MATCH = 0.40 if FACE_ENGINE == "insightface" else 0.363  # cosine for "same person" (SFace: OpenCV's own cut)
 FACE_DIM = 512 if FACE_ENGINE == "insightface" else 128
 FACE_MIN_DET = 0.55    # how sure the face finder must be that it is a face
-MAX_SAMPLES = 60
+MAX_SAMPLES = 150   # enrolled + trained fingerprints per name (training adds at most TRAIN_CAP)
 # Strangers: faces that match nobody are grouped (same person = cosine >= UNKNOWN_SAME) so the owner can name a
 # repeat visitor with one click. Kept on this machine only; a group not seen for UNKNOWN_KEEP_DAYS is dropped.
 UNKNOWN_DIR = os.path.expanduser("~/.local/share/sentinel-bigeye/unknown-faces")
@@ -462,7 +462,97 @@ def name_unknown(gid, name):
 load_unknown()
 
 
-def detect_with_faces(jpeg, faces=False):
+# Face training: while a known face is recognised, but only just (a new angle, other light, from above in the
+# hallway), that fingerprint is added to the same name, so every camera knows you better over the days.
+# Only clear, fairly sure matches are taken, a few per camera per day, each kept with its picture so it can be undone.
+TRAIN_FILE = os.path.expanduser("~/.config/sentinel-bigeye/faces-trained.json")
+TRAIN_DIR = os.path.expanduser("~/.local/share/sentinel-bigeye/trained-faces")
+TRAIN_LO, TRAIN_HI = (0.45, 0.62) if FACE_ENGINE == "sface" else (0.50, 0.68)   # sure it is you, yet not a copy
+TRAIN_MIN_DET, TRAIN_MIN_PX = 0.80, 36
+TRAIN_PER_CAM_DAY, TRAIN_GAP_S, TRAIN_CAP = 6, 900, 80
+TRAIN_LOCK = threading.Lock()
+
+
+def load_train():
+    try:
+        with open(TRAIN_FILE) as handle:
+            return json.load(handle)
+    except (OSError, ValueError):
+        return {"added": []}
+
+
+TRAIN = load_train()
+
+
+def save_train():
+    os.makedirs(os.path.dirname(TRAIN_FILE), exist_ok=True)
+    tmp = TRAIN_FILE + ".tmp"
+    with open(tmp, "w") as handle:
+        json.dump(TRAIN, handle)
+    os.replace(tmp, TRAIN_FILE)
+    os.chmod(TRAIN_FILE, 0o600)
+
+
+def maybe_train(name, sim, f, bgr, cam):
+    fx0, fy0, fx1, fy1 = f["px"]
+    if not (TRAIN_LO <= sim < TRAIN_HI) or f["det"] < TRAIN_MIN_DET or fx1 - fx0 < TRAIN_MIN_PX:
+        return
+    now, day = time.time(), time.strftime("%Y-%m-%d")
+    with TRAIN_LOCK:
+        added = TRAIN.setdefault("added", [])
+        mine = [a for a in added if a["name"] == name]
+        if len(mine) >= TRAIN_CAP:
+            return
+        cam_today = [a for a in mine if a["cam"] == cam and a["day"] == day]
+        if len(cam_today) >= TRAIN_PER_CAM_DAY or (cam_today and now - cam_today[-1]["t"] < TRAIN_GAP_S):
+            return
+        import cv2
+        h, w = bgr.shape[:2]
+        pad = int((fx1 - fx0) * 0.35)
+        crop = bgr[max(0, fy0 - pad):min(h, fy1 + pad), max(0, fx0 - pad):min(w, fx1 + pad)]
+        pid = time.strftime("%Y%m%d-%H%M%S") + "-" + cam
+        os.makedirs(TRAIN_DIR, exist_ok=True)
+        if crop.size:
+            cv2.imwrite(os.path.join(TRAIN_DIR, pid + ".jpg"), crop)
+        samples = KNOWN.get(name, np.zeros((0, FACE_DIM), np.float32))
+        KNOWN[name] = np.vstack([samples, f["emb"][None]])[-MAX_SAMPLES:]
+        save_faces()
+        added.append({"id": pid, "name": name, "cam": cam, "day": day, "t": round(now), "sim": round(sim, 3),
+                      "emb": [round(float(x), 5) for x in f["emb"]]})
+        save_train()
+
+
+def untrain(pid):
+    with TRAIN_LOCK:
+        added = TRAIN.setdefault("added", [])
+        a = next((x for x in added if x["id"] == pid), None)
+        if not a:
+            return {"error": "not found"}
+        samples = KNOWN.get(a["name"])
+        if samples is not None and len(samples):
+            emb = np.asarray(a["emb"], np.float32)
+            keep = np.abs(samples - emb).max(axis=1) > 1e-3
+            KNOWN[a["name"]] = samples[keep]
+            save_faces()
+        added.remove(a)
+        save_train()
+        try:
+            os.remove(os.path.join(TRAIN_DIR, os.path.basename(pid) + ".jpg"))
+        except OSError:
+            pass
+    return {"ok": True}
+
+
+def training_info():
+    with TRAIN_LOCK:
+        added = TRAIN.get("added", [])
+        day = time.strftime("%Y-%m-%d")
+        return {"total": len(added), "today": sum(1 for a in added if a["day"] == day), "cap": TRAIN_CAP,
+                "per_cam_day": TRAIN_PER_CAM_DAY,
+                "recent": [{k: a[k] for k in ("id", "name", "cam", "t", "sim")} for a in added[-40:]][::-1]}
+
+
+def detect_with_faces(jpeg, faces=False, cam="", train=False):
     found, img = detect(jpeg)
     if not faces:
         return found
@@ -482,6 +572,11 @@ def detect_with_faces(jpeg, faces=False):
             d.update(face=f["box"], face_score=round(f["det"], 2), similarity=round(sim, 2))
             if name:
                 d["name"] = name
+                if train and cam:
+                    try:
+                        maybe_train(name, sim, f, bgr, cam)
+                    except Exception as error:
+                        d["train_error"] = str(error)[:80]
             else:
                 try:
                     remember_stranger(f, bgr)
@@ -544,9 +639,34 @@ class Handler(BaseHTTPRequestHandler):
                     drop_unknown(q.get("id", ""))
                     save_unknown()
             with UNKNOWN_LOCK:
-                groups = sorted(({"id": k, "count": v["count"], "first": round(v["first"]), "last": round(v["last"])}
+                def near(v):
+                    best, sim = None, 0.0
+                    for nm, smp in KNOWN.items():
+                        x = float((v["embs"] @ smp.T).max()) if len(smp) else 0.0
+                        if x > sim:
+                            best, sim = nm, x
+                    return best, round(sim, 2)
+                groups = sorted(({"id": k, "count": v["count"], "first": round(v["first"]), "last": round(v["last"]),
+                                  "near": near(v)[0], "near_sim": near(v)[1]}
                                  for k, v in UNKNOWN.items()), key=lambda g: (-g["count"], -g["last"]))
             return self._json({"engine": FACE_ENGINE, "groups": groups})
+        if self.path.startswith("/faces/training"):
+            from urllib.parse import urlsplit, parse_qs
+            u = urlsplit(self.path)
+            q = {k: v[0] for k, v in parse_qs(u.query).items()}
+            if u.path == "/faces/training/picture":
+                try:
+                    data = open(os.path.join(TRAIN_DIR, os.path.basename(q.get("id", "")) + ".jpg"), "rb").read()
+                except OSError:
+                    return self.send_error(404)
+                self.send_response(200)
+                self.send_header("Content-Type", "image/jpeg")
+                self.send_header("Content-Length", str(len(data)))
+                self.end_headers()
+                return self.wfile.write(data)
+            if u.path == "/faces/training/undo":
+                return self._json(untrain(q.get("id", "")))
+            return self._json(training_info())
         if self.path.startswith("/faces/delete"):
             from urllib.parse import urlsplit, parse_qs
             name = parse_qs(urlsplit(self.path).query).get("name", [""])[0]
@@ -574,7 +694,8 @@ class Handler(BaseHTTPRequestHandler):
             if url.path == "/enroll":
                 name = q.get("name", "").strip()[:30]
                 return self._json(enroll(body, name) if name else {"error": "name missing"})
-            return self._json(detect_with_faces(body, faces=q.get("faces") == "1"))
+            return self._json(detect_with_faces(body, faces=q.get("faces") == "1", cam=q.get("cam", "")[:20],
+                                                train=q.get("train") == "1"))
         except Exception as error:
             return self._json({"error": str(error)}, 500)
 

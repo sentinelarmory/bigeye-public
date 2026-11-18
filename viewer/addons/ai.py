@@ -12,6 +12,7 @@ import json
 import os
 import threading
 import time
+import urllib.parse
 import urllib.request
 
 SERVICE = "http://127.0.0.1:8771"
@@ -26,8 +27,9 @@ MIN_SCORE = {"person": 0.55, "cat": 0.45, "dog": 0.45}
 WANTS = {"person": {"person"}, "person_animal": {"person", "cat", "dog"}, "animal": {"cat", "dog"}}
 
 
-def ask(base, jpeg, faces, timeout=3):
-    req = urllib.request.Request(f"{base}/detect?faces={1 if faces else 0}", data=jpeg, headers={"Content-Type": "image/jpeg"})
+def ask(base, jpeg, faces, timeout=3, cam="", train=False):
+    extra = f"&cam={urllib.parse.quote(cam)}&train={1 if train else 0}" if faces and cam else ""
+    req = urllib.request.Request(f"{base}/detect?faces={1 if faces else 0}{extra}", data=jpeg, headers={"Content-Type": "image/jpeg"})
     with urllib.request.urlopen(req, timeout=timeout) as reply:
         return json.load(reply)
 
@@ -73,6 +75,14 @@ class Addon:
     def __init__(self, ctx):
         self.ctx = ctx
 
+    def _train(self, name):
+        """Face training (settings page, Faces): on by default, from every camera but the 360 in the living room."""
+        page = self.ctx.page_settings() if hasattr(self.ctx, "page_settings") else {}
+        if not page.get("face_training", True):
+            return False
+        cams = page.get("face_training_cams")
+        return name in cams if isinstance(cams, list) else name != "cam360"
+
     def start(self):
         for name in self.ctx.cams:
             threading.Thread(target=self._watch, args=(name,), daemon=True).start()
@@ -104,14 +114,14 @@ class Addon:
                         remote_retry_at = 0
                         status["ai_host"] = "the camera machine"
                         if not slow and any(d.get("label") == "person" and d.get("score", 0) >= 0.5 for d in found):
-                            found = ask(SERVICE, cam.frame, faces=True)   # names come from this PC
+                            found = ask(SERVICE, cam.frame, faces=True, cam=name, train=self._train(name))   # names come from this PC
                     except Exception as error:
                         if not remote_retry_at:
                             self.ctx.log(f"{name}: the camera machine's AI not answering ({error}); this PC's AI takes over")
                         remote_retry_at = time.time() + REMOTE_RETRY_S
                         found = None
                 if found is None:
-                    found = ask(SERVICE, cam.frame, faces=not slow)
+                    found = ask(SERVICE, cam.frame, faces=not slow, cam=name, train=self._train(name))
                     status["ai_host"] = "this PC"
                 if down_since:
                     self.ctx.log("AI service answering again")
