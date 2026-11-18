@@ -2,7 +2,7 @@
 
   smart night   (door/window, iWFCam): night vision on after sunset, off after sunrise (sun times from [location] in bigeye.toml; without it 19:00-07:00)
   auto quality  (cameras with a quality control): low when the picture stutters, Full HD again when it is steady
-  auto home     (page-wide): Home when a known face is seen; Away after a while with nobody, if the last person
+  auto home     (page-wide): Home when a known face is seen; Away a set time after a person at the exit cameras, if the last person
                 was seen by the door camera
   timelapse     (per camera): one small picture every 30 s, made into a video of the day after midnight
 
@@ -146,25 +146,28 @@ class Addon:
         else:
             self.phone_away_since = None
         away_after = page.get("away_after_min", 45) * 60
-        t, cam = self.last_person
-        exits = page.get("exit_cams") or ["door"]   # cameras that see you leave (outside the door)
-        # Owner's rule: the cameras decide, not the phone. Movement at an exit camera starts the clock;
-        # a person seen by any other camera afterwards stops it; 5 quiet minutes later -> Away.
+        exits = page.get("exit_cams") or ["door", "phone2", "phone1"]
+        # Owner's rule: the exit cameras are the trigger. A person seen by an exit camera starts the clock;
+        # after away_after quiet minutes at the exits the system arms. Only a known face disarms it (above).
+        # People seen inside (or on the TV) never stop or start anything.
         for name in exits:
-            if (self.ctx.status.get(name, {}) or {}).get("active"):
-                self.exit_seen = now
-        if t and cam not in exits and t > getattr(self, "exit_seen", 0):
-            self.exit_seen = 0
+            for d in (self.ctx.status.get(name, {}).get("ai") or {}).get("found", []) or []:
+                if d.get("label") == "person":
+                    if not getattr(self, "exit_seen", 0):
+                        self.ctx.log(f"auto home: person at the {name} camera, Away in {away_after // 60} min unless a known face is seen")
+                    self.exit_seen = now
         es = getattr(self, "exit_seen", 0)
+        if es and self.last_known > es:   # you were recognised after going past the exits: still home
+            self.exit_seen = 0
+            return
         if home and es and now - es > away_after:
             self.exit_seen = 0
-            self.ctx.set_home(False, f"auto: {int((now - es) / 60)} min since someone went out past the exit cameras, nobody seen inside since")
+            self.ctx.set_home(False, f"auto: {int((now - es) / 60)} min since a person at the exit cameras, no known face since")
             return
+        if not home:
+            self.exit_seen = 0
         if home and getattr(self, "phone_away_since", None) and now - self.phone_away_since > away_after:
             self.ctx.set_home(False, f"auto: your phone has been off the home Wi-Fi for {int((now - self.phone_away_since) / 60)} min")
-            return
-        if home and t and now - t > away_after and cam in exits:
-            self.ctx.set_home(False, f"auto: nobody seen for {int((now - t) / 60)} min, last person was at the {cam} camera")
 
     # -------------------------------------------------------------------------------------
     def _timelapse(self):

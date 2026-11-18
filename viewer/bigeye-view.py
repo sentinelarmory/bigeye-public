@@ -2238,7 +2238,7 @@ class Handler(BaseHTTPRequestHandler):
                     page["exit_cams"] = [c for c in body["exit_cams"] if c in CAMS]
                 save_settings()
             return self._json({"on": page.get("auto_home", False), "away_after_min": page.get("away_after_min", 45),
-                               "exit_cams": page.get("exit_cams") or ["door"]})
+                               "exit_cams": page.get("exit_cams") or ["door", "phone2", "phone1"]})
         if path == "home":
             page = SETTINGS.setdefault("_page", {})
             if self.command == "POST":
