@@ -1547,13 +1547,22 @@ function renderTop() {
   nvrTop.appendChild(el('button', {'class': 'tb2' + (NVR.page_ === 'menu' ? ' on' : ''), title: 'Main menu', onclick: function () { NVR.page_ === 'menu' ? NVR.closeMenu() : NVR.openMenu(); }}, [el('span', {text: '🏠'}), el('span', {text: 'MENU'})]));
   nvrTop.appendChild(el('button', {'class': 'tb2' + (NVR.page_ === 'live' ? ' on' : ''), text: 'LIVE', onclick: NVR.closeMenu}));
   nvrTop.appendChild(el('span', {style: 'flex:1'}));
-  nvrTop.appendChild(el('button', {'class': 'ico', title: fresh ? fresh + ' new events: open them' : 'Events', onclick: function () { NVR.closeMenu(); SIDE.tab = 'events'; SIDE.markSeen(); SIDE.render(true); }},
+  nvrTop.appendChild(el('button', {'class': 'ico', title: fresh ? fresh + ' new events: open them' : 'Events', onclick: function (e) { e.stopPropagation(); NVR.closeMenu(); SIDE.markSeen(); openSide('events'); }},
     [el('span', {text: '🔔'}), fresh ? el('span', {'class': 'badge', text: fresh > 99 ? '99+' : String(fresh)}) : null]));
   nvrTop.appendChild(el('button', {'class': 'ico', title: HOME ? 'Home: nothing is recorded or sent (click: Away)' : 'Away: watching (click: Home)', text: HOME ? '🏠' : '🛡',
-    onclick: function () { click('#homeseg button[data-h="' + (HOME ? '0' : '1') + '"]'); setTimeout(renderTop, 800); }}));
-  nvrTop.appendChild(el('button', {'class': 'ico hideonm', title: 'Recordings folder', text: '⬇', onclick: function () { click('[data-open="recordings"]'); }}));
+    onclick: function () { json('/home', {method: 'POST'}).then(function (s) { showHome(s); renderTop(); toast(s.home ? '🏠 Home: nothing is recorded or sent' : '🛡 Away: watching and recording', 'ok'); })
+      .catch(function () { toast('BigEye did not answer', 'bad'); }); }}));
+  nvrTop.appendChild(el('button', {'class': 'ico', title: 'Playback: recordings and clips', text: '▶', onclick: function (e) { e.stopPropagation(); NVR.closeMenu(); openSide('events'); }}));
+  nvrTop.appendChild(el('button', {'class': 'ico', title: 'All settings', text: '⚙', onclick: function () { NVR.closeMenu(); SETPAGE.open(); }}));
   nvrTop.appendChild(el('button', {'class': 'ico hideonm', title: 'Full screen (F)', text: '⛶', onclick: fullscreen}));
   nvrTop.appendChild(el('span', {'class': 'when', text: nowText()}));
+}
+// open the side menu on a tab, whether it is folded away (desktop) or a closed drawer (phone)
+function openSide(tab) {
+  SIDE.tab = tab; store('nvr:tab', tab);
+  if (MOBILE()) { document.body.classList.add('side-open'); SIDE.render(true); return; }
+  if (document.body.classList.contains('side-off')) NVR.toggleSide();
+  SIDE.render(true);
 }
 SIDE.markSeen = function () { seenT = Date.now() / 1000; store('nvr:seen', String(seenT)); renderTop(); };
 function nowText() { return MOBILE() ? new Date().toLocaleTimeString() : new Date().toLocaleString().replace(',', ''); }
