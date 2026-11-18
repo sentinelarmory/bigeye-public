@@ -184,6 +184,26 @@ body.nvr #nvrside{top:44px}body.nvr #nvrside .brand{display:none}
 .tile .links{display:grid;grid-template-columns:1fr 1fr;gap:4px 12px}.tile .links a{color:var(--txt);font-size:13px;cursor:pointer;opacity:.85}.tile .links a:hover{color:var(--acc);opacity:1}
 .dlg{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:31;background:var(--card);border:1px solid var(--line);border-radius:12px;box-shadow:0 20px 50px rgba(0,0,0,.6);width:min(640px,calc(100vw - 32px));max-height:80vh;overflow:auto}
 .dlg .dh{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:1px solid var(--line);font-weight:700}.dlg .db{padding:16px;white-space:pre-wrap}
+
+/* ---------- the settings page: everything in one place, by category */
+#setpage{position:fixed;inset:0;z-index:40;background:var(--bg);display:grid;grid-template-columns:230px 1fr;grid-template-rows:auto 1fr}
+#setpage[hidden]{display:none}#setpage>*{min-width:0}
+#setpage .sph{grid-column:1/3;display:flex;align-items:center;gap:12px;padding:12px 18px;border-bottom:1px solid var(--line);background:var(--card)}
+#setpage .sph h2{margin:0;font-size:17px}#setpage .sph .sp{flex:1}
+#setpage .spn{border-right:1px solid var(--line);padding:10px;display:flex;flex-direction:column;gap:4px;overflow-y:auto;background:var(--card)}
+#setpage .spn button{all:unset;cursor:pointer;padding:10px 12px;border-radius:8px;color:var(--txt);display:flex;gap:10px;align-items:center}
+#setpage .spn button:hover{background:var(--card2)}#setpage .spn button.on{background:var(--acc);color:#fff}
+#setpage .spb{overflow-y:auto;padding:18px 22px 60px;max-width:1100px;min-width:0}#setpage .sc,#setpage .sc>*{min-width:0}#setpage .hint{overflow-wrap:anywhere}
+#setpage .spb h3{margin:22px 0 8px;font-size:15px;color:var(--acc)}#setpage .spb h3:first-child{margin-top:0}
+#setpage .sc{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px;display:grid;gap:12px;margin-bottom:12px}
+#setpage .row{flex-wrap:wrap}
+#setpage table{border-collapse:collapse;width:100%}#setpage td,#setpage th{padding:8px 6px;border-bottom:1px solid var(--line);text-align:left;vertical-align:middle}
+#setpage th{color:var(--dim);font-weight:600;font-size:12px}
+#setpage select,#setpage input[type=number]{background:var(--card2);color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:6px 8px}
+#setpage .warnt{color:var(--warn)}#setpage .badt{color:var(--bad)}
+@media (max-width:700px){#setpage{grid-template-columns:minmax(0,1fr);grid-template-rows:auto auto 1fr}#setpage .sph{grid-column:1}#setpage .sph h2{font-size:15px}#setpage .row .lbl{min-width:0;width:100%}
+ #setpage .spn{flex-direction:row;overflow-x:auto;border-right:0;border-bottom:1px solid var(--line);padding:6px}#setpage .spn button{white-space:nowrap;padding:8px 10px}
+ #setpage .spb{padding:12px 12px 60px}#setpage .tw{overflow-x:auto}}
 </style>
 <header><h1>Sentinel-<span>BigEye</span></h1>
 <nav class="seg"><button class="on">📹 Cameras</button><button onclick="location.href='/telemetry'">📡 Call-home</button></nav>
@@ -199,7 +219,9 @@ body.nvr #nvrside{top:44px}body.nvr #nvrside .brand{display:none}
 <button class="btn" id="foldall" title="Fold or unfold the settings under every camera (remembered on this device)">▤ Settings</button>
 <button class="btn" id="gear" title="Where the marks and buttons sit on the picture">⚙ Display</button>
 <button class="btn" id="nvrbtn" title="NVR view: all cameras edge to edge, status bar, settings in a side drawer (N)">▦ NVR</button>
-<button class="btn" id="fs" title="Full screen (F)">Full screen</button></header>
+<button class="btn" id="fs" title="Full screen (F)">Full screen</button>
+<button class="btn" id="setpagebtn" title="All settings in one place, by category">⚙ All settings</button></header>
+<div id="setpage" hidden></div>
 <div id="usagepanel" hidden style="position:fixed;right:16px;top:58px;z-index:8;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px;box-shadow:0 10px 30px rgba(0,0,0,.5);width:min(460px,calc(100vw - 32px));display:grid;gap:10px">
 <div class="row" style="justify-content:space-between"><h3 style="margin:0;font-size:14px">📊 What BigEye uses</h3>
 <button class="btn" id="usageclose" title="Close (Esc)" style="padding:2px 9px">×</button></div><div id="usagebody" class="hint">Measuring…</div></div>
@@ -1629,6 +1651,8 @@ function renderMenu() {
     grid2.appendChild(tile('💾', 'Backup', 'Everything is saved on this PC', null,
       [['Pictures', function () { click('[data-open="snapshots"]'); }], ['Recordings', function () { click('[data-open="recordings"]'); }], ['Motion clips', function () { click('[data-open="motion"]'); }]]));
   } else {
+    grid2.appendChild(tile('⚙', 'All settings', 'Everything in one place: security, alerts, cameras, recording, phones, system', go(function () { SETPAGE.open(); }),
+      [['Security and alarm', go(function () { SETPAGE.open('security'); })], ['Alerts', go(function () { SETPAGE.open('alerts'); })], ['System', go(function () { SETPAGE.open('system'); })]]));
     grid2.appendChild(tile('📹', 'Cameras', 'Picture, night vision, motion, names, Wi-Fi on the phones', null,
       NVR.cams().map(function (n) { return [title(n), go(function () { NVR.drawer(n); })]; })));
     grid2.appendChild(tile('📡', 'Network', 'How each camera is connected', go(function () {
@@ -1658,4 +1682,186 @@ side.addEventListener('click', function (e) {
   if (MOBILE() && e.target.closest('.camrow, .viewrow, .sevt, .g')) setTimeout(function () { document.body.classList.remove('side-open'); NVR.bar(); }, 120);
 });
 if (store('nvr') === '1') NVR.set(true);
+
+// ---------- the settings page: every setting in one place, under its category (uses the same server calls as the rest)
+var SETPAGE = (function () {
+  var root = document.getElementById('setpage');
+  var CATS = [['security', '🛡', 'Security and alarm'], ['alerts', '🔔', 'Alerts'], ['cameras', '📹', 'Cameras'], ['recording', '💾', 'Recording and storage'],
+    ['faces', '👑', 'Faces and animals'], ['phones', '📱', 'Phone cameras'], ['display', '🖥', 'Display'], ['system', '🛠', 'System']];
+  var cur = store('setpage:cat') || 'security';
+  var body;
+  var names = function () { return CAMS.map(function (c) { return c.name; }); };
+  var cfg = function (n) { return CAMS.filter(function (c) { return c.name === n; })[0] || {}; };
+  var card = function (kids) { return el('div', {'class': 'sc'}, kids); };
+  var hint = function (t) { return el('span', {'class': 'hint', text: t}); };
+  var close = function () { root.hidden = true; document.body.style.overflow = ''; };
+  var openCam = function (n) {
+    close();
+    if (document.body.classList.contains('nvr') && window.NVR && NVR.drawer) { NVR.drawer(n); return; }
+    var c = document.getElementById('card-' + n); if (!c) return;
+    if (c.classList.contains('folded') && typeof setFold === 'function') setFold(n, false);
+    c.scrollIntoView({behavior: 'smooth', block: 'start'});
+  };
+  var openPanel = function (sel) { close(); setTimeout(function () { click(sel); }, 0); };
+  var REC_ON = [['person', '🧍 Person'], ['person_animal', '🧍🐈 Person or animal'], ['animal', '🐈 Animal'], ['motion', 'Any movement']];
+  var select = function (opts, val, onch) {
+    var s = el('select', {onchange: function () { onch(s.value); }}, opts.map(function (o) { var x = el('option', {value: o[0], text: o[1]}); if (o[0] === val) x.selected = true; return x; }));
+    return s;
+  };
+  var sets = {};   // camera -> its settings, read once per page open
+  var loadAll = function () { return Promise.all(names().map(function (n) { return json('/settings/' + n).then(function (m) { sets[n] = m; MOTION[n] = m; }).catch(function () { sets[n] = null; }); })); };
+  var save = function (n, change, note) { return postJSON('/settings/' + n, change).then(function (m) { sets[n] = m; MOTION[n] = m; if (note) toast(title(n) + ': ' + note, 'ok'); return true; })
+    .catch(function () { toast(title(n) + ': could not save', 'bad'); return false; }); };
+
+  var R = {};
+  R.security = function () {
+    var modeSeg = seg([{label: '🏠 Home', v: true}, {label: '🛡 Away', v: false}], function (o) {
+      if (o.v === HOME) return true;
+      return json('/home', {method: 'POST'}).then(function (s) { showHome(s); toast(s.home ? 'Home: nothing is recorded or sent' : 'Away: watching and recording', 'ok'); return true; });
+    }, HOME ? '🏠 Home' : '🛡 Away');
+    var autoSeg = seg([{label: 'On', v: true}, {label: 'Off', v: false}], function (o) {
+      return postJSON('/autohome', {on: o.v}).then(function (s) { showAutoHome(s); toast('Auto Home/Away ' + (s.on ? 'on' : 'off'), 'ok'); return true; });
+    });
+    var mins = el('input', {type: 'number', min: 1, max: 240, style: 'width:80px'});
+    var minsSave = el('button', {'class': 'btn', text: 'Save', onclick: function () {
+      var v = parseInt(mins.value, 10); if (!(v >= 1 && v <= 240)) { toast('Pick 1 to 240 minutes', 'bad'); return; }
+      postJSON('/autohome', {away_after_min: v}).then(function () { toast('Away after ' + v + ' min with nobody', 'ok'); });
+    }});
+    var exitBox = el('div', {'class': 'row', style: 'gap:14px'});
+    var drawExits = function (s) {
+      exitBox.textContent = '';
+      names().forEach(function (n) {
+        var cb = el('input', {type: 'checkbox'}); cb.checked = (s.exit_cams || []).indexOf(n) >= 0;
+        cb.onchange = function () {
+          var list = names().filter(function (x) { var b = exitBox.querySelector('[data-c="' + x + '"]'); return b && b.checked; });
+          postJSON('/autohome', {exit_cams: list}).then(function () { toast('Exit cameras: ' + (list.map(title).join(', ') || 'none'), 'ok'); drawExits({exit_cams: list}); });
+        };
+        cb.dataset.c = n;
+        var off = sets[n] && !sets[n].on;
+        exitBox.appendChild(el('label', {style: 'display:flex;gap:6px;align-items:center'}, [cb, el('span', {text: title(n)}),
+          off && cb.checked ? el('span', {'class': 'warnt', text: '(motion sensor off: does not count)'}) : null]));
+      });
+    };
+    json('/autohome').then(function (s) { autoSeg.set(s.on ? 'On' : 'Off'); mins.value = s.away_after_min; drawExits(s); });
+    body.appendChild(el('h3', {text: 'Alarm mode'}));
+    body.appendChild(card([
+      row('Mode', [modeSeg, hint('Home: nothing is recorded or sent. Away: each camera records and alerts as set below.')]),
+      row('Auto Home/Away', [autoSeg, hint('Home at once when a known face is seen (or your phone is on the home Wi-Fi); Away when nobody is seen after someone went out.')]),
+      row('Go Away after', [mins, el('span', {text: 'min'}), minsSave, hint('quiet minutes after the last person at an exit camera')]),
+      row('Exit cameras', [exitBox]),
+      hint('Exit cameras see you leave. Movement there starts the clock; a person seen by any other camera stops it.')]));
+    body.appendChild(el('h3', {text: 'What each camera does'}));
+    var tb = el('tbody');
+    names().forEach(function (n) {
+      var m = sets[n]; if (!m) { tb.appendChild(el('tr', {}, [el('td', {text: title(n)}), el('td', {colspan: 5, 'class': 'hint', text: 'no answer'})])); return; }
+      tb.appendChild(el('tr', {}, [
+        el('td', {}, [el('b', {text: title(n)})]),
+        el('td', {}, [seg([{label: 'On', v: true}, {label: 'Off', v: false}], function (o) { return save(n, {on: o.v}, 'motion sensor ' + (o.v ? 'on' : 'off')).then(function (ok) { if (ok) R.redraw(); return ok; }); }, m.on ? 'On' : 'Off')]),
+        el('td', {}, [select(REC_ON, m.record_on, function (v) { save(n, {record_on: v}, 'records on ' + v.replace('_', ' or ')); })]),
+        el('td', {}, [seg([{label: 'Record', v: true}, {label: 'Off', v: false}], function (o) { return save(n, {record: o.v}, o.v ? 'records' : 'does not record'); }, m.record === false ? 'Off' : 'Record')]),
+        el('td', {}, [seg([{label: 'Pause', v: false}, {label: 'Keep', v: true}], function (o) { return save(n, {at_home: o.v}, o.v ? 'keeps recording at home' : 'pauses at home'); }, m.at_home ? 'Keep' : 'Pause')]),
+        el('td', {}, [seg([{label: 'On', v: true}, {label: 'Off', v: false}], function (o) { return save(n, {notify: o.v}, 'phone message ' + (o.v ? 'on' : 'off')); }, m.notify ? 'On' : 'Off')])]));
+    });
+    body.appendChild(card([el('div', {'class': 'tw'}, [el('table', {}, [el('thead', {}, [el('tr', {}, ['Camera', 'Motion sensor', 'Records on', 'Recording', 'At home', 'Phone message'].map(function (h) { return el('th', {text: h}); }))]), tb])]),
+      hint('Strangers while Away are an alarm. Known faces and animals never are. Ignore zones and sensitivity: open the camera under Cameras.')]));
+  };
+  R.alerts = function () {
+    body.appendChild(el('h3', {text: 'Messages to your phone'}));
+    var list = el('div', {style: 'display:grid;gap:8px'});
+    names().forEach(function (n) { var m = sets[n]; if (!m) return;
+      list.appendChild(row(title(n), [seg([{label: 'Phone message', v: true}, {label: 'No message', v: false}], function (o) { return save(n, {notify: o.v}, 'phone message ' + (o.v ? 'on' : 'off')); }, m.notify ? 'Phone message' : 'No message'),
+        m.on ? null : hint('motion sensor is off on this camera')])); });
+    body.appendChild(card([list, hint('A message is sent for a person while Away (strangers first), a camera gone for 10 minutes, and when the guard needs you.')]));
+    body.appendChild(el('h3', {text: 'The BigEye app'}));
+    body.appendChild(card([row('Phone app', [el('button', {'class': 'btn', text: '📱 Pair a phone', onclick: function () { openPanel('#phonebtn'); }}), hint('the app gets the alerts and the live pictures, at home and over the your VPN')])]));
+  };
+  R.cameras = function () {
+    body.appendChild(el('h3', {text: 'Cameras'}));
+    var tb = el('tbody');
+    names().forEach(function (n) {
+      var c = document.getElementById('card-' + n), meta = c && c.meta ? c.meta.textContent : '';
+      tb.appendChild(el('tr', {}, [el('td', {}, [el('b', {text: title(n)}), el('div', {'class': 'hint', text: n + (cfg(n).phone ? ' · phone' : '')})]),
+        el('td', {'class': 'hint', text: meta || '—'}),
+        el('td', {}, [el('button', {'class': 'btn', text: '⚙ Open', onclick: function () { openCam(n); }})])]));
+    });
+    body.appendChild(card([el('div', {'class': 'tw'}, [el('table', {}, [el('thead', {}, [el('tr', {}, ['Camera', 'Connection', 'Settings'].map(function (h) { return el('th', {text: h}); }))]), tb])]),
+      hint('Each camera: picture, night vision, motion zones and sensitivity, privacy masks, turn picture, name, Wi-Fi (phones).')]));
+    body.appendChild(card([row('All cameras', [el('button', {'class': 'btn', text: '🔄 Reconnect all', onclick: function () { click('#fixall'); }}), hint('restarts the camera links on the camera machine')])]));
+  };
+  R.recording = function () {
+    body.appendChild(el('h3', {text: 'Saved on this PC'}));
+    body.appendChild(card([row('Folder', [el('span', {text: SAVEROOT})]),
+      row('Open', [['📷 Pictures', 'snapshots'], ['⏺ Recordings', 'recordings'], ['🏃 Motion clips', 'motion']].map(function (b) { return el('button', {'class': 'btn', text: b[0], onclick: function () { click('[data-open="' + b[1] + '"]'); }}); })),
+      row('Use', [el('button', {'class': 'btn', text: '📊 Disk and GPU use', onclick: function () { openPanel('#usagebtn'); }})])]));
+    body.appendChild(el('h3', {text: 'What is recorded'}));
+    body.appendChild(card([hint('Per camera: Security and alarm → What each camera does. Timelapse and auto quality: open the camera under Cameras → Automation.')]));
+  };
+  R.faces = function () {
+    body.appendChild(el('h3', {text: 'Faces and animals'}));
+    body.appendChild(card([row('Known faces', [el('button', {'class': 'btn', text: '👑 Faces, people not named yet, animals', onclick: function () { openPanel('#gear'); }})]),
+      hint('Known faces switch to Home and are never an alarm. Name new people so they stop counting as strangers.')]));
+  };
+  R.phones = function () {
+    body.appendChild(el('h3', {text: 'Phone cameras'}));
+    var ph = names().filter(function (n) { return cfg(n).phone; });
+    if (!ph.length) body.appendChild(card([hint('No phone cameras.')]));
+    ph.forEach(function (n) {
+      var st = el('span', {'class': 'hint', text: 'reading…'});
+      var scr = seg([{label: 'Off', v: false}, {label: 'On', v: true}], function (o) { return postJSON('/phonectl/' + n + '/screen', {on: o.v}).then(function (s) { show(s); return true; }).catch(function () { toast(title(n) + ': no answer', 'bad'); return false; }); });
+      var lk = seg([{label: 'Locked', v: true}, {label: 'Unlocked', v: false}], function (o) {
+        if (!o.v && !confirm('Unlock the light on ' + title(n) + '?\n\nWARNING: behind a window the light shines straight back into the camera. Only unlock it for a moment, by hand.')) return false;
+        return postJSON('/phonectl/' + n + '/light', {lock: o.v, on: false}).then(function (s) { show(s); return true; }).catch(function () { return false; }); });
+      var show = function (s) { if (!s || s.error) { st.textContent = '⚠ ' + ((s && s.error) || 'no answer'); return; }
+        scr.set(s.screen === 'on' ? 'On' : 'Off'); lk.set(s.torch_lock === false ? 'Unlocked' : 'Locked');
+        st.textContent = 'screen ' + s.screen + ' · light ' + (s.torch ? 'ON' : 'off'); };
+      json('/phonectl/' + n).then(show).catch(function () { st.textContent = '⚠ no answer'; });
+      body.appendChild(card([el('b', {text: title(n)}),
+        el('div', {'class': 'hint badt', text: '⚠ Do not touch while it films through a window: a lit screen or light reflects in the glass.'}),
+        row('Screen', [scr]), row('Light', [lk, st]),
+        row('More', [el('button', {'class': 'btn', text: '⚙ Wi-Fi, turn picture, focus…', onclick: function () { openCam(n); }})])]));
+    });
+  };
+  R.display = function () {
+    body.appendChild(el('h3', {text: 'Display'}));
+    body.appendChild(card([
+      row('View', [el('button', {'class': 'btn', text: '▦ NVR view on/off', onclick: function () { close(); click('#nvrbtn'); }}), el('button', {'class': 'btn', text: 'Full screen', onclick: function () { close(); fullscreen(); }})]),
+      row('Marks on the picture', [el('button', {'class': 'btn', text: '⚙ Where marks and buttons sit', onclick: function () { openPanel('#gear'); }})]),
+      row('Settings under cameras', [el('button', {'class': 'btn', text: '▤ Fold / unfold all', onclick: function () { close(); click('#foldall'); }})])]));
+  };
+  R.system = function () {
+    body.appendChild(el('h3', {text: 'Keeping it running'}));
+    var af = seg([{label: 'On', v: true}, {label: 'Off', v: false}], function (o) {
+      return json('/autofix').then(function (s) { if (s.on === o.v) return true; return json('/autofix', {method: 'POST'}).then(function (s2) { showAutofix(s2); toast('Auto-fix ' + (s2.on ? 'on' : 'off'), 'ok'); return true; }); }); });
+    json('/autofix').then(function (s) { af.set(s.on ? 'On' : 'Off'); });
+    body.appendChild(card([
+      row('Auto-fix', [af, hint('a camera without picture for 90 s is reconnected by itself (at most every 10 min)')]),
+      row('Reconnect', [el('button', {'class': 'btn', text: '🔄 Reconnect all cameras', onclick: function () { click('#fixall'); }})]),
+      row('Use', [el('button', {'class': 'btn', text: '📊 What BigEye uses', onclick: function () { openPanel('#usagebtn'); }})]),
+      row('Call-home', [el('button', {'class': 'btn', text: '📡 Open', onclick: function () { location.href = '/telemetry'; }}), hint('what the cameras send out, and who they try to reach')])]));
+    var adds = el('div', {'class': 'hint', text: 'reading…'});
+    json('/addons').then(function (a) { adds.textContent = JSON.stringify(a, null, 1).replace(/[{}"\[\]]/g, '').replace(/\n\s*\n/g, '\n').trim() || '—'; adds.style.whiteSpace = 'pre-wrap'; }).catch(function () { adds.textContent = '—'; });
+    body.appendChild(el('h3', {text: 'Add-ons running'}));
+    body.appendChild(card([adds]));
+  };
+  R.redraw = function () { body.textContent = ''; (R[cur] || R.security)(); };
+  var render = function () {
+    root.textContent = '';
+    root.appendChild(el('div', {'class': 'sph'}, [el('h2', {text: '⚙ Settings'}), el('span', {'class': 'sp'}),
+      el('span', {'class': 'hint', text: HOME ? '🏠 Home' : '🛡 Away'}), el('button', {'class': 'btn', text: '× Close', onclick: close})]));
+    var nav = el('div', {'class': 'spn'});
+    CATS.forEach(function (c) { nav.appendChild(el('button', {'class': c[0] === cur ? 'on' : '', onclick: function () { cur = c[0]; store('setpage:cat', cur); render(); }}, [el('span', {text: c[1]}), el('span', {text: c[2]})])); });
+    root.appendChild(nav);
+    body = el('div', {'class': 'spb'}); root.appendChild(body);
+    R.redraw();
+  };
+  var open = function (cat) {
+    if (cat) cur = cat;
+    root.hidden = false; document.body.style.overflow = 'hidden';
+    root.textContent = ''; root.appendChild(el('div', {'class': 'sph'}, [el('h2', {text: '⚙ Settings'}), el('span', {'class': 'hint', text: 'reading…'})]));
+    loadAll().then(render);
+  };
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !root.hidden) close(); });
+  document.getElementById('setpagebtn').addEventListener('click', function () { open(); });
+  return {open: open, close: close};
+})();
 </script></html>
