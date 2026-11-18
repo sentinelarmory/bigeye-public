@@ -1100,7 +1100,7 @@ def trigger(name, info):
     if cfg.get("notify") and now - LAST_NOTIFY.get(name, 0) > NOTIFY_GAP:
         LAST_NOTIFY[name] = now
         who = (info.get('name') or ('Stranger' if info.get('label') == 'person' else info.get('label')) or 'movement').capitalize()
-        push_alert(f"{who} at the {name} camera", f"{who} at {stamp.strftime('%H:%M:%S')} (you are Away).", "urgent", name,
+        push_alert(f"{who} at the {name} camera", f"{who} at {stamp.strftime('%H:%M:%S')} (the alarm is armed).", "urgent", name,
                    os.path.relpath(pic, SAVE_ROOT))
         threading.Thread(target=notify_phone, args=(name, f"{(info.get('name') or ('Stranger' if info.get('label') == 'person' else info.get('label')) or 'movement').capitalize()} at {stamp.strftime('%H:%M:%S')}"),
                          daemon=True).start()
@@ -2024,7 +2024,7 @@ class Handler(BaseHTTPRequestHandler):
                 with open(path, "wb") as handle:
                     handle.write(CAMS[cam].frame)
                 pic = os.path.relpath(path, SAVE_ROOT)
-            push_alert(f"TEST: Stranger at the {cam} camera", f"Stranger at {time.strftime('%H:%M:%S')} (you are Away). "
+            push_alert(f"TEST: Stranger at the {cam} camera", f"Stranger at {time.strftime('%H:%M:%S')} (the alarm is armed). "
                        "This is only a test from BigEye.", "urgent", cam, pic)
             if q.get("aim") == "1" and cam:   # also test turning the PTZ camera to the alarm position
                 ALARM_AIMED[0] = 0.0

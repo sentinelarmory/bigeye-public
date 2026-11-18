@@ -210,8 +210,8 @@ body.nvr #nvrside{top:44px}body.nvr #nvrside .brand{display:none}
 <span id="clock"></span><span class="sp"></span>
 <div class="seg" title="Open the folder on this PC"><button data-open="snapshots">📷 Pictures</button><button data-open="recordings">⏺ Recordings</button><button data-open="motion">🏃 Motion</button></div>
 <div class="seg" id="layout"><button data-l="cols1">1</button><button data-l="" class="on">2</button><button data-l="cols3">3</button></div>
-<button class="btn" id="autohome" title="Home when your face is recognised; Away a few minutes after you are seen at the exit cameras">Auto</button>
-<div class="seg" id="homeseg" title="Home: nothing is recorded or sent. Away: people (and what you chose) are recorded."><button data-h="1">🏠 Home</button><button data-h="0">🛡 Away</button></div>
+<button class="btn" id="autohome" title="Disarms when your face is recognised; arms a few minutes after you are seen at the exit cameras">Auto</button>
+<div class="seg" id="homeseg" title="Disarmed: nothing is recorded or sent. Armed: people (and what you chose) are recorded."><button data-h="1">🔓 Disarmed</button><button data-h="0">🛡 Armed</button></div>
 <button class="btn" id="fixall" title="Restart the camera links on the camera machine (what helped when cameras dropped out)">🔄 Reconnect cameras</button>
 <button class="btn" id="autofix" title="Restart a camera's link by itself after 90 s without picture (at most every 10 min)">Auto-fix</button>
 <button class="btn" id="usagebtn" title="What BigEye uses of this PC, and what the guard does">📊 …</button>
@@ -564,7 +564,7 @@ function motionPanel(c, card) {
     return saveMotion(cam, {look_for: o.v}).then(function (ok) { if (ok) toast(title(cam) + ': the AI looks for ' + o.label.toLowerCase(), 'ok'); return ok; }); });
   var knownSeg = seg([{label: 'Don\'t record them', v: true}, {label: 'Record them too', v: false}], function (o) { return saveMotion(cam, {skip_known: o.v}); });
   var homeSeg = seg([{label: 'Pause', v: false}, {label: 'Keep recording', v: true}], function (o) {
-    return saveMotion(cam, {at_home: o.v}).then(function (ok) { if (ok) toast(title(cam) + (o.v ? ': records in Home mode too' : ': pauses in Home mode'), 'ok'); return ok; }); });
+    return saveMotion(cam, {at_home: o.v}).then(function (ok) { if (ok) toast(title(cam) + (o.v ? ': records while disarmed too' : ': pauses while disarmed'), 'ok'); return ok; }); });
   var phone = seg([{label: 'Phone message', v: true}, {label: 'No message', v: false}], function (o) { return saveMotion(cam, {notify: o.v}); });
   json('/settings/' + cam).then(function (m) {
     MOTION[cam] = m; onoff.set(m.on ? 'On' : 'Off'); sens.setValue(m.sens);
@@ -574,7 +574,7 @@ function motionPanel(c, card) {
   });
   zoneEditor(cam, card);
   return el('div', {'class': 'panel', style: 'padding:0;gap:10px'}, [
-    row('Motion sensor', [onoff, meter]), row('AI looks for', [lookSeg]), row('Record when', [whenSeg]), row('In Home mode', [homeSeg]),
+    row('Motion sensor', [onoff, meter]), row('AI looks for', [lookSeg]), row('Record when', [whenSeg]), row('While disarmed', [homeSeg]),
     el('div', {'class': 'hint', text: 'Movement wakes it up; the AI (on this PC) checks what it is. A person on the TV counts too: draw an ignore zone over the TV.'}), sens,
     row('Ignore zones', [drawBtn, toolSeg(), el('button', {'class': 'btn', text: 'Clear all', onclick: function () {
       if (confirm('Remove all ignore zones on ' + cam + '?')) saveMotion(cam, {zones: []}); }}), el('span', {'class': 'hint zonecount'})]),
@@ -1058,7 +1058,7 @@ function phonePanel() {
   body.appendChild(el('div', {'class': 'hint'}, [
     el('div', {text: '1. On the phone (home Wi-Fi or your VPN), open ' + addr + '/app/download and install the app.'}),
     el('div', {text: '2. In the app: address ' + addr + ', then the code below.'}),
-    el('div', {text: 'Alerts: a person while Away, a camera gone for 10 minutes, and when the guard needs you.'})]));
+    el('div', {text: 'Alerts: a person while armed, a camera gone for 10 minutes, and when the guard needs you.'})]));
   body.appendChild(codeBox);
   body.appendChild(el('div', {'class': 'row'}, [el('button', {'class': 'btn', text: 'New code', onclick: function () {
     json('/app/pair-code').then(function (r) { codeBox.textContent = r.code;
@@ -1151,7 +1151,7 @@ var HOME = false;
 function showAutoHome(s) { var b = document.getElementById('autohome'); b.classList.toggle('on', s.on); b.textContent = s.on ? 'Auto ✓' : 'Auto'; }
 json('/autohome').then(showAutoHome).catch(function () {});
 document.getElementById('autohome').addEventListener('click', function () {
-  json('/autohome', {method: 'POST'}).then(function (s) { showAutoHome(s); toast(s.on ? 'Home/Away now switches by itself (known face = Home, nobody for ' + s.away_after_min + ' min after the door = Away)' : 'Home/Away back to manual', 'ok'); });
+  json('/autohome', {method: 'POST'}).then(function (s) { showAutoHome(s); toast(s.on ? 'Arming now happens by itself (your face = disarm, armed ' + s.away_after_min + ' min after you went out)' : 'Arm/disarm back to manual', 'ok'); });
 });
 setInterval(function () { json('/home').then(showHome).catch(function () {}); }, 15000);
 function showHome(s) { HOME = s.home; document.querySelectorAll('#homeseg button').forEach(function (b) { b.classList.toggle('on', (b.dataset.h === '1') === s.home); }); }
@@ -1159,7 +1159,7 @@ json('/home').then(showHome).catch(function () {});
 document.querySelectorAll('#homeseg button').forEach(function (b) {
   b.addEventListener('click', function () {
     if ((b.dataset.h === '1') === HOME) return;
-    json('/home', {method: 'POST'}).then(function (s) { showHome(s); toast(s.home ? 'Home: nothing is recorded or sent' : 'Away: recording what each camera is set to watch for', 'ok'); });
+    json('/home', {method: 'POST'}).then(function (s) { showHome(s); toast(s.home ? 'Disarmed: nothing is recorded or sent' : 'Armed: recording what each camera is set to watch for', 'ok'); });
   });
 });
 document.getElementById('autofix').addEventListener('click', function () {
@@ -1415,7 +1415,7 @@ SIDE.system = function () {   // borrow the header's own buttons, so they keep w
   var put = function (sel) { var n = document.querySelector(sel); if (!n) return;
     if (!SIDE.moved.some(function (m) { return m.n === n; })) SIDE.moved.push({n: n, p: n.parentNode, nx: n.nextSibling});
     box.appendChild(n); };
-  add('Home / Away'); put('#homeseg'); put('#autohome');
+  add('Alarm: armed / disarmed'); put('#homeseg'); put('#autohome');
   add('Cameras'); put('#fixall'); put('#autofix');
   add('Saved on this PC'); put('[title="Open the folder on this PC"]');
   add('This PC and the phone'); put('#usagebtn'); put('#phonebtn');
@@ -1549,8 +1549,8 @@ function renderTop() {
   nvrTop.appendChild(el('span', {style: 'flex:1'}));
   nvrTop.appendChild(el('button', {'class': 'ico', title: fresh ? fresh + ' new events: open them' : 'Events', onclick: function (e) { e.stopPropagation(); NVR.closeMenu(); SIDE.markSeen(); openSide('events'); }},
     [el('span', {text: '🔔'}), fresh ? el('span', {'class': 'badge', text: fresh > 99 ? '99+' : String(fresh)}) : null]));
-  nvrTop.appendChild(el('button', {'class': 'ico', title: HOME ? 'Home: nothing is recorded or sent (click: Away)' : 'Away: watching (click: Home)', text: HOME ? '🏠' : '🛡',
-    onclick: function () { json('/home', {method: 'POST'}).then(function (s) { showHome(s); renderTop(); toast(s.home ? '🏠 Home: nothing is recorded or sent' : '🛡 Away: watching and recording', 'ok'); })
+  nvrTop.appendChild(el('button', {'class': 'ico', title: HOME ? 'Disarmed: nothing is recorded or sent (click: arm)' : 'Armed: watching (click: disarm)', text: HOME ? '🔓' : '🛡',
+    onclick: function () { json('/home', {method: 'POST'}).then(function (s) { showHome(s); renderTop(); toast(s.home ? '🔓 Disarmed: nothing is recorded or sent' : '🛡 Armed: watching and recording', 'ok'); })
       .catch(function () { toast('BigEye did not answer', 'bad'); }); }}));
   nvrTop.appendChild(el('button', {'class': 'ico', title: 'Playback: recordings and clips', text: '▶', onclick: function (e) { e.stopPropagation(); NVR.closeMenu(); openSide('events'); }}));
   nvrTop.appendChild(el('button', {'class': 'ico', title: 'All settings', text: '⚙', onclick: function () { NVR.closeMenu(); SETPAGE.open(); }}));
@@ -1565,10 +1565,10 @@ function openSide(tab) {
   SIDE.render(true);
 }
 function homeSwitch(cls) {
-  return el('button', {'class': cls || 'btn', title: HOME ? 'Alarm mode: Home (nothing recorded or sent). Click to arm: Away' : 'Alarm mode: Away (armed). Click to disarm: Home',
-    text: HOME ? '🏠 Home' : '🛡 Away', onclick: function (e) { e.stopPropagation(); var b = this;
-      json('/home', {method: 'POST'}).then(function (s) { showHome(s); renderTop(); b.textContent = s.home ? '🏠 Home' : '🛡 Away';
-        toast(s.home ? '🏠 Home: nothing is recorded or sent' : '🛡 Away: armed, watching and recording', 'ok'); }).catch(function () { toast('BigEye did not answer', 'bad'); }); }});
+  return el('button', {'class': cls || 'btn', title: HOME ? 'Alarm: disarmed (nothing recorded or sent). Click to arm' : 'Alarm: armed. Click to disarm',
+    text: HOME ? '🔓 Disarmed' : '🛡 Armed', onclick: function (e) { e.stopPropagation(); var b = this;
+      json('/home', {method: 'POST'}).then(function (s) { showHome(s); renderTop(); b.textContent = s.home ? '🔓 Disarmed' : '🛡 Armed';
+        toast(s.home ? '🔓 Disarmed: nothing is recorded or sent' : '🛡 Armed: armed, watching and recording', 'ok'); }).catch(function () { toast('BigEye did not answer', 'bad'); }); }});
 }
 SIDE.markSeen = function () { seenT = Date.now() / 1000; store('nvr:seen', String(seenT)); renderTop(); };
 function nowText() { return MOBILE() ? new Date().toLocaleTimeString() : new Date().toLocaleString().replace(',', ''); }
@@ -1675,8 +1675,8 @@ function renderMenu() {
       dialog('📡 Network', el('div', {'class': 'db', text: rows + '\n\nPhones: ⚙ on the phone camera → Wi-Fi (phone) to move it to another network.'})); })));
     grid2.appendChild(tile('🗄', 'Storage', 'Saved on this PC: ' + SAVEROOT, null,
       [['Pictures', function () { click('[data-open="snapshots"]'); }], ['Recordings', function () { click('[data-open="recordings"]'); }], ['Motion clips', function () { click('[data-open="motion"]'); }], ['Disk and GPU use', function () { NVR.closeMenu(); click('#usagebtn'); }]]));
-    grid2.appendChild(tile('🚨', 'Event', 'Home / Away and what is recorded', side('system'),
-      [['Home', function () { click('#homeseg button[data-h="1"]'); }], ['Away', function () { click('#homeseg button[data-h="0"]'); }], ['Auto Home/Away', function () { click('#autohome'); }]]));
+    grid2.appendChild(tile('🚨', 'Event', 'Arm / disarm and what is recorded', side('system'),
+      [['Disarm', function () { json('/home').then(function (s) { if (!s.home) json('/home', {method: 'POST'}).then(showHome); }); }], ['Arm', function () { json('/home').then(function (s) { if (s.home) json('/home', {method: 'POST'}).then(showHome); }); }], ['Auto arm/disarm', function () { click('#autohome'); }]]));
     grid2.appendChild(tile('👑', 'Faces and animals', 'Known faces, people not named yet, the cat', go(function () { click('#gear'); })));
     grid2.appendChild(tile('🖥', 'System', 'Display, marks on the picture, the phone app', null,
       [['Display', go(function () { click('#gear'); })], ['Phone app', go(function () { click('#phonebtn'); })], ['Full screen', fullscreen], ['Normal view', function () { NVR.closeMenu(); NVR.set(false); }]]));
@@ -1730,18 +1730,18 @@ var SETPAGE = (function () {
 
   var R = {};
   R.security = function () {
-    var modeSeg = seg([{label: '🏠 Home', v: true}, {label: '🛡 Away', v: false}], function (o) {
+    var modeSeg = seg([{label: '🔓 Disarmed', v: true}, {label: '🛡 Armed', v: false}], function (o) {
       if (o.v === HOME) return true;
-      return json('/home', {method: 'POST'}).then(function (s) { showHome(s); renderTop(); var hs = root.querySelector('.sph .btn'); if (hs) hs.textContent = s.home ? '🏠 Home' : '🛡 Away';
-        toast(s.home ? '🏠 Home: nothing is recorded or sent' : '🛡 Away: armed, watching and recording', 'ok'); return true; });
-    }, HOME ? '🏠 Home' : '🛡 Away');
+      return json('/home', {method: 'POST'}).then(function (s) { showHome(s); renderTop(); var hs = root.querySelector('.sph .btn'); if (hs) hs.textContent = s.home ? '🔓 Disarmed' : '🛡 Armed';
+        toast(s.home ? '🔓 Disarmed: nothing is recorded or sent' : '🛡 Armed: armed, watching and recording', 'ok'); return true; });
+    }, HOME ? '🔓 Disarmed' : '🛡 Armed');
     var autoSeg = seg([{label: 'On', v: true}, {label: 'Off', v: false}], function (o) {
-      return postJSON('/autohome', {on: o.v}).then(function (s) { showAutoHome(s); toast('Auto Home/Away ' + (s.on ? 'on' : 'off'), 'ok'); return true; });
+      return postJSON('/autohome', {on: o.v}).then(function (s) { showAutoHome(s); toast('Auto arm/disarm ' + (s.on ? 'on' : 'off'), 'ok'); return true; });
     });
     var mins = el('input', {type: 'number', min: 1, max: 240, style: 'width:80px'});
     var minsSave = el('button', {'class': 'btn', text: 'Save', onclick: function () {
       var v = parseInt(mins.value, 10); if (!(v >= 1 && v <= 240)) { toast('Pick 1 to 240 minutes', 'bad'); return; }
-      postJSON('/autohome', {away_after_min: v}).then(function () { toast('Away after ' + v + ' min with nobody', 'ok'); });
+      postJSON('/autohome', {away_after_min: v}).then(function () { toast('Arms ' + v + ' min after you went out', 'ok'); });
     }});
     var exitBox = el('div', {'class': 'row', style: 'gap:14px'});
     var drawExits = function (s) {
@@ -1761,11 +1761,11 @@ var SETPAGE = (function () {
     json('/autohome').then(function (s) { autoSeg.set(s.on ? 'On' : 'Off'); mins.value = s.away_after_min; drawExits(s); });
     body.appendChild(el('h3', {text: 'Alarm mode'}));
     body.appendChild(card([
-      row('Mode', [modeSeg, hint('Home: nothing is recorded or sent. Away: each camera records and alerts as set below.')]),
-      row('Auto Home/Away', [autoSeg, hint('Away: set minutes after a person at the exit cameras. Home: as soon as a camera recognises your face (or your phone is on the home Wi-Fi).')]),
-      row('Go Away after', [mins, el('span', {text: 'min'}), minsSave, hint('minutes after you were last seen at an exit camera')]),
+      row('Mode', [modeSeg, hint('Disarmed: nothing is recorded or sent. Armed: each camera records and alerts as set below.')]),
+      row('Auto arm/disarm', [autoSeg, hint('Arms: set minutes after you are seen at the exit cameras. Disarms: as soon as a camera recognises your face (or your phone is on the home Wi-Fi).')]),
+      row('Arm after', [mins, el('span', {text: 'min'}), minsSave, hint('minutes after you were last seen at an exit camera')]),
       row('Exit cameras', [exitBox]),
-      hint('Your known face at an exit camera starts the clock (strangers in the hallway do not). When the minutes above pass, the system arms (Away). Your face seen again disarms it (Home). People inside, or on the TV, do not count.')]));
+      hint('Your known face at an exit camera starts the clock (strangers in the hallway do not). When the minutes above pass, the system arms. Your face seen again disarms it. People inside, or on the TV, do not count.')]));
     body.appendChild(el('h3', {text: 'What each camera does'}));
     var tb = el('tbody');
     names().forEach(function (n) {
@@ -1779,7 +1779,7 @@ var SETPAGE = (function () {
         el('td', {}, [seg([{label: 'On', v: true}, {label: 'Off', v: false}], function (o) { return save(n, {notify: o.v}, 'phone message ' + (o.v ? 'on' : 'off')); }, m.notify ? 'On' : 'Off')])]));
     });
     body.appendChild(card([el('div', {'class': 'tw'}, [el('table', {}, [el('thead', {}, [el('tr', {}, ['Camera', 'Motion sensor', 'Records on', 'Recording', 'At home', 'Phone message'].map(function (h) { return el('th', {text: h}); }))]), tb])]),
-      hint('Strangers while Away are an alarm. Known faces and animals never are. Ignore zones and sensitivity: open the camera under Cameras.')]));
+      hint('Strangers while armed are an alarm. Known faces and animals never are. Ignore zones and sensitivity: open the camera under Cameras.')]));
   };
   R.alerts = function () {
     body.appendChild(el('h3', {text: 'Messages to your phone'}));
@@ -1787,7 +1787,7 @@ var SETPAGE = (function () {
     names().forEach(function (n) { var m = sets[n]; if (!m) return;
       list.appendChild(row(title(n), [seg([{label: 'Phone message', v: true}, {label: 'No message', v: false}], function (o) { return save(n, {notify: o.v}, 'phone message ' + (o.v ? 'on' : 'off')); }, m.notify ? 'Phone message' : 'No message'),
         m.on ? null : hint('motion sensor is off on this camera')])); });
-    body.appendChild(card([list, hint('A message is sent for a person while Away (strangers first), a camera gone for 10 minutes, and when the guard needs you.')]));
+    body.appendChild(card([list, hint('A message is sent for a person while armed (strangers first), a camera gone for 10 minutes, and when the guard needs you.')]));
     body.appendChild(el('h3', {text: 'The BigEye app'}));
     body.appendChild(card([row('Phone app', [el('button', {'class': 'btn', text: '📱 Pair a phone', onclick: function () { openPanel('#phonebtn'); }}), hint('the app gets the alerts and the live pictures, at home and over the your VPN')])]));
   };
@@ -1829,7 +1829,7 @@ var SETPAGE = (function () {
         pList.appendChild(row(nm, [el('span', {'class': 'hint', text: faces[nm] + ' pictures'}),
           seg([{label: '🔑 Lives here', v: true}, {label: '👋 Guest', v: false}], function (o) {
             var list = (h.all ? ns : hh).filter(function (x) { return x !== nm; }); if (o.v) list.push(nm);
-            return postJSON('/household', {names: list}).then(function (r2) { h = r2; hh = r2.names; toast(nm + (o.v ? ' lives here: switches Home/Away' : ' is a guest: recognised, never an alarm, does not switch Home/Away'), 'ok'); return true; }); },
+            return postJSON('/household', {names: list}).then(function (r2) { h = r2; hh = r2.names; toast(nm + (o.v ? ' lives here: arms and disarms' : ' is a guest: recognised, never an alarm, does not arm or disarm'), 'ok'); return true; }); },
             lives ? '🔑 Lives here' : '👋 Guest'),
           el('button', {'class': 'btn', text: '🗑 Forget', onclick: function () {
             if (!confirm('Forget ' + nm + '? All ' + faces[nm] + ' pictures of this face are removed.')) return;
@@ -1851,7 +1851,7 @@ var SETPAGE = (function () {
       el('b', {text: 'Add a person (or more pictures of someone)'}),
       row('Name', [newName]), row('Camera', [newCam, learn]),
       hint('The person stands alone in front of the chosen camera and looks at it. Take a few pictures from different cameras and angles. Or name someone the cameras already saw, below.'),
-      hint('Lives here: their face switches Home/Away. Guest: recognised and never an alarm, but does not switch Home/Away.')]));
+      hint('Lives here: their face arms and disarms. Guest: recognised and never an alarm, but does not arm or disarm.')]));
     // ---- training: recognised, but only just (new angle, other light) -> added, so every camera learns you
     body.appendChild(el('h3', {text: 'Face training'}));
     var tSeg = seg([{label: 'On', v: true}, {label: 'Off', v: false}], function (o) {
