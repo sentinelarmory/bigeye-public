@@ -297,6 +297,8 @@ function seg(opts, run, current) {
 function choice(cam, key, opts) {
   var s = seg(opts, function (o) { return ctl(cam, o.path, o.note).then(function (ok) { if (ok) store(cam + ':' + key, o.label); return ok; }); },
     store(cam + ':' + key));
+  // what BigEye last set and sends again after a camera restart (the same on every device)
+  json('/ctlstate/' + cam).then(function (st) { opts.forEach(function (o) { var p = o.path.split('?'); if (st[p[0]] === p[1]) { s.set(o.label); store(cam + ':' + key, o.label); } }); }).catch(function () {});
   return s;
 }
 function row(label, kids) { return el('div', {'class': 'row'}, [el('span', {'class': 'lbl', text: label})].concat(kids)); }

@@ -250,6 +250,38 @@ def log(msg):
         pass
 
 
+
+# Settings a camera forgets when it restarts (night vision, work light, PIR, night mode, tracking, quality):
+# BigEye remembers the last choice and sends it again when the camera's picture comes back.
+REMEMBER_CONTROLS = ("ir", "control/light", "pir", "night", "tracking", "quality")
+
+
+def remember_control(name, path, query):
+    base = path.split("?", 1)[0]
+    if base not in REMEMBER_CONTROLS or not query:
+        return
+    c = settings(name).setdefault("controls", {})
+    if c.get(base) != query:
+        c[base] = query
+        save_settings()
+
+
+def reapply_controls(name, wait=10):
+    time.sleep(wait)   # let the camera finish starting
+    base = CONTROLS.get(name)
+    done = []
+    for path, query in list(settings(name).get("controls", {}).items()):
+        if path == "tracking" and "on=1" in query and settings(name).get("ptz", {}).get("locked"):
+            continue
+        try:
+            urllib.request.urlopen(f"{base}/{path}?{query}", timeout=5).read()
+            done.append(f"{path}?{query}")
+        except Exception as error:
+            log(f"{name}: could not set {path}?{query} again ({error})")
+    if done:
+        log(f"{name}: settings sent again after the restart: {', '.join(done)}")
+
+
 def picture_monitor():
     """Logs when a camera's picture stops and when it comes back, so freezes can be explained."""
     stalled = {}
@@ -262,6 +294,8 @@ def picture_monitor():
                 log(f"{name}: picture stopped" + (f" (last frame {age:.0f} s ago)" if age else " (no frame yet)"))
             elif not is_stalled and stalled.get(name):
                 log(f"{name}: picture back")
+                if name in CONTROLS and settings(name).get("controls"):
+                    threading.Thread(target=reapply_controls, args=(name,), daemon=True).start()
             stalled[name] = is_stalled
         time.sleep(2)
 
@@ -1252,7 +1286,9 @@ class AddonContext:
     @staticmethod
     def control(name, path):
         with urllib.request.urlopen(f"{CONTROLS[name]}/{path}", timeout=4) as r:
-            return r.read()
+            out = r.read()
+        remember_control(name, path.split("?", 1)[0], path.split("?", 1)[1] if "?" in path else "")
+        return out
 
     @staticmethod
     def set_quality(name, level):
@@ -2252,6 +2288,8 @@ class Handler(BaseHTTPRequestHandler):
                 save_settings()
             return self._json({"on": page.get("auto_home", False), "away_after_min": page.get("away_after_min", 45),
                                "exit_cams": page.get("exit_cams") or ["door", "phone2", "phone1"]})
+        if path.startswith("ctlstate/") and path[9:] in CAMS:   # what BigEye last set (the camera cannot say)
+            return self._json(settings(path[9:]).get("controls", {}))
         if path == "camorder":   # the order of the cameras on the page (first = top left), same for every viewer
             page = SETTINGS.setdefault("_page", {})
             if self.command == "POST":
@@ -2343,6 +2381,8 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 with urllib.request.urlopen(req, timeout=4) as reply:
                     body, code = reply.read(), reply.status
+                if code == 200 and self.command == "GET":
+                    remember_control(parts[1], parts[2], query)
             except Exception as error:  # bridge down or camera asleep
                 body, code = str(error).encode(), 502
             self._send(code, body)
