@@ -2059,11 +2059,13 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         path = self.path.split("?")[0].strip("/")
         if path == "":
+            order = SETTINGS.get("_page", {}).get("cam_order") or []
+            rank = {n: i for i, n in enumerate(order)}
             config = [{"name": n, "controls": n in CONTROLS, "features": sorted(FEATURES.get(n, ())),
                        # picture help needs the ffmpeg reader (not the MJPEG pass-through)
                        "enhance": not CAMS[n].passthrough(), "clock": bool(clock_box(n)), "label": cam_label(n),
                        "phone": is_phone(n)}
-                      for n in CAMS]
+                      for n in sorted(CAMS, key=lambda c: rank.get(c, len(rank) + list(CAMS).index(c)))]
             with open(PAGE_FILE, encoding="utf-8") as handle:
                 page = handle.read()
             body = page.replace("__CONFIG__", json.dumps(config)).replace("__SAVEROOT__", json.dumps(win_path(SAVE_ROOT)))
@@ -2250,6 +2252,15 @@ class Handler(BaseHTTPRequestHandler):
                 save_settings()
             return self._json({"on": page.get("auto_home", False), "away_after_min": page.get("away_after_min", 45),
                                "exit_cams": page.get("exit_cams") or ["door", "phone2", "phone1"]})
+        if path == "camorder":   # the order of the cameras on the page (first = top left), same for every viewer
+            page = SETTINGS.setdefault("_page", {})
+            if self.command == "POST":
+                body = self._body_json() or {}
+                if isinstance(body.get("order"), list):
+                    page["cam_order"] = [c for c in body["order"] if c in CAMS]
+                    save_settings()
+                    log(f"camera order: {', '.join(page['cam_order'])}")
+            return self._json({"order": page.get("cam_order") or list(CAMS)})
         if path == "household":   # names whose face switches Home/Away; [] or missing = everyone known
             page = SETTINGS.setdefault("_page", {})
             if self.command == "POST":

@@ -41,7 +41,9 @@ FACES_FILE = os.path.expanduser("~/.config/sentinel-bigeye/" + ("faces.json" if 
 FACE_MATCH = 0.40 if FACE_ENGINE == "insightface" else 0.363  # cosine for "same person" (SFace: OpenCV's own cut)
 FACE_DIM = 512 if FACE_ENGINE == "insightface" else 128
 FACE_MIN_DET = 0.55    # how sure the face finder must be that it is a face
-MAX_SAMPLES = 150   # enrolled + trained fingerprints per name (training adds at most TRAIN_CAP)
+MAX_SAMPLES = 300   # fingerprints per name; when full, nothing more is added (old ones are never pushed out)
+NAME_MIN_PX = 48    # a face smaller than this is never given a name (too few pixels to tell people apart)
+NAME_TOP = 3        # a name needs its best 3 fingerprints to agree on average, not one lucky look-alike
 # Strangers: faces that match nobody are grouped (same person = cosine >= UNKNOWN_SAME) so the owner can name a
 # repeat visitor with one click. Kept on this machine only; a group not seen for UNKNOWN_KEEP_DAYS is dropped.
 UNKNOWN_DIR = os.path.expanduser("~/.local/share/sentinel-bigeye/unknown-faces")
@@ -293,10 +295,40 @@ def face_in(img_bgr, box, w, h):
 def who(emb):
     best, sim = None, 0.0
     for name, samples in KNOWN.items():
-        s = float((samples @ emb).max()) if len(samples) else 0.0
+        if not len(samples):
+            continue
+        sims = np.sort(samples @ emb)
+        s = float(sims[-NAME_TOP:].mean()) if len(sims) >= NAME_TOP else float(sims[-1])
         if s > sim:
             best, sim = name, s
     return (best, sim) if sim >= FACE_MATCH else (None, sim)
+
+
+def add_samples(name, embs):
+    """Add fingerprints to a name, up to MAX_SAMPLES; never pushes out older ones. Returns how many were added."""
+    samples = KNOWN.get(name, np.zeros((0, FACE_DIM), np.float32))
+    room = MAX_SAMPLES - len(samples)
+    if room <= 0:
+        return 0
+    embs = np.asarray(embs, np.float32).reshape(-1, FACE_DIM)[:room]
+    KNOWN[name] = np.vstack([samples, embs])
+    save_faces()
+    return len(embs)
+
+
+def remember_learned(name, embs, crop, source, cam=""):
+    """Keep a picture and the fingerprints of everything a name learned, so it can be seen and undone."""
+    import cv2
+    now = time.time()
+    pid = time.strftime("%Y%m%d-%H%M%S") + f"-{source}" + (f"-{cam}" if cam else "") + f"-{int(now * 1000) % 1000:03d}"
+    os.makedirs(TRAIN_DIR, exist_ok=True)
+    if crop is not None and getattr(crop, "size", 0):
+        cv2.imwrite(os.path.join(TRAIN_DIR, pid + ".jpg"), crop)
+    with TRAIN_LOCK:
+        TRAIN.setdefault("added", []).append({"id": pid, "name": name, "cam": cam, "day": time.strftime("%Y-%m-%d"),
+                                              "t": round(now), "sim": None, "source": source,
+                                              "embs": [[round(float(x), 5) for x in e] for e in np.asarray(embs).reshape(-1, FACE_DIM)]})
+        save_train()
 
 
 def nms(boxes, scores, iou=0.5):
@@ -451,9 +483,16 @@ def name_unknown(gid, name):
         g = UNKNOWN.get(gid)
         if not g:
             return {"error": "no such group"}
-        samples = KNOWN.get(name, np.zeros((0, FACE_DIM), np.float32))
-        KNOWN[name] = np.vstack([samples, g["embs"]])[-MAX_SAMPLES:]
-        save_faces()
+        added = add_samples(name, g["embs"])
+        if not added:
+            return {"error": f"{name} is full ({MAX_SAMPLES} pictures): undo some first"}
+        crop = None
+        try:
+            import cv2
+            crop = cv2.imread(os.path.join(UNKNOWN_DIR, gid + ".jpg"))
+        except Exception:
+            pass
+        remember_learned(name, g["embs"][:added], crop, "named")
         drop_unknown(gid)
         save_unknown()
     return {"name": name, "samples": int(len(KNOWN[name]))}
@@ -468,7 +507,7 @@ load_unknown()
 TRAIN_FILE = os.path.expanduser("~/.config/sentinel-bigeye/faces-trained.json")
 TRAIN_DIR = os.path.expanduser("~/.local/share/sentinel-bigeye/trained-faces")
 TRAIN_LO, TRAIN_HI = (0.45, 0.62) if FACE_ENGINE == "sface" else (0.50, 0.68)   # sure it is you, yet not a copy
-TRAIN_MIN_DET, TRAIN_MIN_PX = 0.80, 36
+TRAIN_MIN_DET, TRAIN_MIN_PX = 0.85, 64
 TRAIN_PER_CAM_DAY, TRAIN_GAP_S, TRAIN_CAP = 6, 900, 80
 TRAIN_LOCK = threading.Lock()
 
@@ -500,7 +539,7 @@ def maybe_train(name, sim, f, bgr, cam):
     now, day = time.time(), time.strftime("%Y-%m-%d")
     with TRAIN_LOCK:
         added = TRAIN.setdefault("added", [])
-        mine = [a for a in added if a["name"] == name]
+        mine = [a for a in added if a["name"] == name and a.get("source", "trained") == "trained"]
         if len(mine) >= TRAIN_CAP:
             return
         cam_today = [a for a in mine if a["cam"] == cam and a["day"] == day]
@@ -514,9 +553,8 @@ def maybe_train(name, sim, f, bgr, cam):
         os.makedirs(TRAIN_DIR, exist_ok=True)
         if crop.size:
             cv2.imwrite(os.path.join(TRAIN_DIR, pid + ".jpg"), crop)
-        samples = KNOWN.get(name, np.zeros((0, FACE_DIM), np.float32))
-        KNOWN[name] = np.vstack([samples, f["emb"][None]])[-MAX_SAMPLES:]
-        save_faces()
+        if not add_samples(name, f["emb"][None]):
+            return
         added.append({"id": pid, "name": name, "cam": cam, "day": day, "t": round(now), "sim": round(sim, 3),
                       "emb": [round(float(x), 5) for x in f["emb"]]})
         save_train()
@@ -530,8 +568,10 @@ def untrain(pid):
             return {"error": "not found"}
         samples = KNOWN.get(a["name"])
         if samples is not None and len(samples):
-            emb = np.asarray(a["emb"], np.float32)
-            keep = np.abs(samples - emb).max(axis=1) > 1e-3
+            embs = np.asarray(a.get("embs") or [a["emb"]], np.float32).reshape(-1, FACE_DIM)
+            keep = np.ones(len(samples), bool)
+            for emb in embs:
+                keep &= np.abs(samples - emb).max(axis=1) > 1e-3
             KNOWN[a["name"]] = samples[keep]
             save_faces()
         added.remove(a)
@@ -547,9 +587,11 @@ def training_info():
     with TRAIN_LOCK:
         added = TRAIN.get("added", [])
         day = time.strftime("%Y-%m-%d")
-        return {"total": len(added), "today": sum(1 for a in added if a["day"] == day), "cap": TRAIN_CAP,
+        auto = [a for a in added if a.get("source", "trained") == "trained"]
+        return {"total": len(auto), "today": sum(1 for a in auto if a["day"] == day), "cap": TRAIN_CAP,
                 "per_cam_day": TRAIN_PER_CAM_DAY,
-                "recent": [{k: a[k] for k in ("id", "name", "cam", "t", "sim")} for a in added[-40:]][::-1]}
+                "recent": [{"id": a["id"], "name": a["name"], "cam": a.get("cam", ""), "t": a["t"], "sim": a.get("sim"),
+                            "source": a.get("source", "trained"), "n": len(a.get("embs") or [1])} for a in added[-80:]][::-1]}
 
 
 def detect_with_faces(jpeg, faces=False, cam="", train=False):
@@ -569,6 +611,10 @@ def detect_with_faces(jpeg, faces=False, cam="", train=False):
             continue
         if f:
             name, sim = who(f["emb"])
+            if name and f["px"][2] - f["px"][0] < NAME_MIN_PX:
+                name = None   # too small to be sure who it is: no name, and not a stranger either
+                d.update(face=f["box"], face_score=round(f["det"], 2), similarity=round(sim, 2), face_small=True)
+                continue
             d.update(face=f["box"], face_score=round(f["det"], 2), similarity=round(sim, 2))
             if name:
                 d["name"] = name
@@ -595,9 +641,14 @@ def enroll(jpeg, name):
     f = face_in(np.asarray(img)[:, :, ::-1].copy(), people[0]["box"], w, h)
     if not f:
         return {"error": "no clear face: look toward the camera"}
-    samples = KNOWN.get(name, np.zeros((0, FACE_DIM), np.float32))
-    KNOWN[name] = np.vstack([samples, f["emb"][None]])[-MAX_SAMPLES:]
-    save_faces()
+    if f["px"][2] - f["px"][0] < NAME_MIN_PX:
+        return {"error": "the face is too small in this camera: come closer"}
+    if not add_samples(name, f["emb"][None]):
+        return {"error": f"{name} is full ({MAX_SAMPLES} pictures): undo some first"}
+    bgr = np.asarray(img)[:, :, ::-1].copy()
+    fx0, fy0, fx1, fy1 = f["px"]
+    pad = int((fx1 - fx0) * 0.35)
+    remember_learned(name, f["emb"][None], bgr[max(0, fy0 - pad):fy1 + pad, max(0, fx0 - pad):fx1 + pad], "enrolled")
     return {"name": name, "samples": int(len(KNOWN[name])), "face_score": round(f["det"], 2)}
 
 

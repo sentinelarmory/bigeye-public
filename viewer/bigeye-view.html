@@ -1628,6 +1628,14 @@ function ctxMenu(n, x, y) {
   it('⏺', 'Record on / off', function () { rec(n); });
   it('⚙', 'Camera settings', function () { NVR.drawer(n); });
   if (c && c.controls) it('🔄', 'Reconnect this camera', function () { reconnect(n); });
+  var moveCam = function (step) {
+    var order = CAMS.map(function (k) { return k.name; }), i = order.indexOf(n), j = i + step;
+    if (j < 0 || j >= order.length) { toast(title(n) + ' is already ' + (step < 0 ? 'first' : 'last')); return; }
+    order.splice(j, 0, order.splice(i, 1)[0]);
+    postJSON('/camorder', {order: order}).then(function () { toast(title(n) + ' moved: the page reloads', 'ok'); setTimeout(function () { location.reload(); }, 600); });
+  };
+  it('◀', 'Move earlier', function () { moveCam(-1); });
+  it('▶', 'Move later', function () { moveCam(1); });
   ctx.appendChild(el('div', {'class': 'sep'}));
   it('▦', 'Main menu', function () { NVR.openMenu('apps'); });
   ctx.hidden = false;
@@ -1870,37 +1878,20 @@ var SETPAGE = (function () {
     });
     var loadT = function () { json('/faces/training').then(function (r) {
       if (r.error) { tStat.textContent = '⚠ ' + r.error; return; }
-      tStat.textContent = r.total + ' pictures learned so far (' + r.today + ' today) · at most ' + r.per_cam_day + ' per camera a day, ' + r.cap + ' in all';
+      tStat.textContent = 'Training: ' + r.total + ' learned by itself (' + r.today + ' today, at most ' + r.per_cam_day + ' per camera a day). Below: everything the faces learned, newest first.';
       tGrid.textContent = '';
       (r.recent || []).forEach(function (a) {
         var img = el('img', {src: '/faces/training/picture?id=' + encodeURIComponent(a.id), style: 'width:84px;height:84px;object-fit:cover;border-radius:8px;display:block', loading: 'lazy'});
         var und = el('button', {'class': 'btn', text: '× Not me', style: 'padding:2px 6px;font-size:12px', onclick: function () {
           json('/faces/training/undo?id=' + encodeURIComponent(a.id), {method: 'POST'}).then(function () { toast('Removed from ' + a.name, 'ok'); loadT(); }); }});
         tGrid.appendChild(el('div', {style: 'display:grid;gap:4px;justify-items:center;width:90px'}, [img,
-          el('span', {'class': 'hint', style: 'font-size:11px;text-align:center', text: title(a.cam) + ' · ' + new Date(a.t * 1000).toLocaleDateString()}), und]));
+          el('span', {'class': 'hint', style: 'font-size:11px;text-align:center', text: a.name.split(' ')[0] + ' · ' + ({trained: 'trained', named: 'named', enrolled: 'added'}[a.source] || a.source) + (a.cam ? ' · ' + title(a.cam) : '') + (a.n > 1 ? ' · ' + a.n + ' looks' : '') + ' · ' + new Date(a.t * 1000).toLocaleDateString()}), und]));
       });
     }).catch(function () { tStat.textContent = '⚠ the AI service did not answer'; }); };
     loadT();
     body.appendChild(card([row('Training', [tSeg, hint('when a camera recognises you, but only just (new angle, other light, seen from above), that look is added to your face, a few per camera a day')]),
       row('Learn from', [tCams]), tStat, tGrid,
       hint('Wrong one? "× Not me" removes it again. The 360 in the living room is left out by default.')]));
-    // ---- people not named yet that look a lot like a known face: one tap adds them
-    body.appendChild(el('h3', {text: 'Might be you?'}));
-    var mGrid = el('div', {style: 'display:flex;flex-wrap:wrap;gap:10px'});
-    var mHint = hint('reading…');
-    json('/faces/unknown').then(function (r) {
-      var g = (r.groups || []).filter(function (x) { return x.near && x.near_sim >= 0.25; }).sort(function (a, b) { return b.near_sim - a.near_sim; }).slice(0, 12);
-      mHint.textContent = g.length ? 'Faces the cameras saw that come close to a known face. Tap "It\'s me" to teach it (all its pictures are added).' : 'Nothing close to a known face right now.';
-      g.forEach(function (x) {
-        mGrid.appendChild(el('div', {style: 'display:grid;gap:4px;justify-items:center;width:110px'}, [
-          el('img', {src: '/faces/unknown/picture?id=' + encodeURIComponent(x.id), style: 'width:100px;height:100px;object-fit:cover;border-radius:8px', loading: 'lazy'}),
-          el('span', {'class': 'hint', style: 'font-size:11px;text-align:center', text: x.near + '? ' + Math.round(x.near_sim * 100) + '% · seen ' + x.count + '×'}),
-          el('button', {'class': 'btn', text: "✓ It's " + x.near.split(' ')[0], style: 'padding:3px 6px;font-size:12px', onclick: function (e) {
-            json('/faces/unknown/name?id=' + encodeURIComponent(x.id) + '&name=' + encodeURIComponent(x.near), {method: 'POST'}).then(function (res) {
-              toast(res.error ? res.error : x.near + ' now has ' + res.samples + ' pictures', res.error ? 'bad' : 'ok'); if (!res.error) e.target.closest('div').remove(); }); }})]));
-      });
-    }).catch(function () { mHint.textContent = '⚠ the AI service did not answer'; });
-    body.appendChild(card([mHint, mGrid]));
     body.appendChild(el('h3', {text: 'People the cameras saw, not named yet'}));
     var uGrid = el('div', {style: 'display:flex;flex-wrap:wrap;gap:10px'});
     json('/faces/unknown').then(function (r) {
@@ -1921,7 +1912,7 @@ var SETPAGE = (function () {
         uGrid.appendChild(box);
       });
     }).catch(function () { uGrid.appendChild(hint('⚠ the AI service did not answer')); });
-    body.appendChild(card([uGrid, hint('Type a name to make it a known face: a friend, family, the postman. × forgets it. Unnamed faces not seen for 30 days are dropped.')]));
+    body.appendChild(card([uGrid, hint('Only name a face you are sure of, from a clear picture. A wrong name lets that person disarm the alarm. Unnamed faces not seen for 30 days are dropped.')]));
   };
   R.phones = function () {
     body.appendChild(el('h3', {text: 'Phone cameras'}));
@@ -1944,6 +1935,23 @@ var SETPAGE = (function () {
     });
   };
   R.display = function () {
+    body.appendChild(el('h3', {text: 'Camera order'}));
+    var order = names().slice();
+    var oList = el('div', {style: 'display:grid;gap:6px;max-width:460px'});
+    var drawO = function () {
+      oList.textContent = '';
+      order.forEach(function (n, i) {
+        oList.appendChild(el('div', {'class': 'row', style: 'justify-content:space-between;background:var(--card2);border-radius:8px;padding:6px 10px'}, [
+          el('span', {text: (i + 1) + '.  ' + title(n)}),
+          el('span', {}, [el('button', {'class': 'btn', text: '↑', disabled: i === 0 ? 'disabled' : null, onclick: function () { order.splice(i - 1, 0, order.splice(i, 1)[0]); drawO(); }}),
+            el('button', {'class': 'btn', text: '↓', style: 'margin-left:4px', disabled: i === order.length - 1 ? 'disabled' : null, onclick: function () { order.splice(i + 1, 0, order.splice(i, 1)[0]); drawO(); }})])]));
+      });
+      oList.querySelectorAll('button[disabled="null"]').forEach(function (b) { b.removeAttribute('disabled'); });
+    };
+    drawO();
+    body.appendChild(card([oList, row('', [el('button', {'class': 'btn', text: 'Save order', onclick: function () {
+      postJSON('/camorder', {order: order}).then(function () { toast('Camera order saved: the page reloads', 'ok'); setTimeout(function () { location.reload(); }, 700); }); }}),
+      hint('First is top left. The same order on the PC, the phone app and in NVR view. Tip: right-click (or long-press) a camera → Move earlier / later.')])]));
     body.appendChild(el('h3', {text: 'Display'}));
     body.appendChild(card([
       row('View', [el('button', {'class': 'btn', text: '▦ NVR view on/off', onclick: function () { close(); click('#nvrbtn'); }}), el('button', {'class': 'btn', text: 'Full screen', onclick: function () { close(); fullscreen(); }})]),
